@@ -215,6 +215,43 @@ tbody tr:hover td{background:var(--hover)}
 .banner a{color:var(--brand-text)}
 .code{background:#f7f8f9;border:1px solid var(--line-strong);border-radius:7px;padding:10px 12px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all;user-select:all}
 
+
+/* ---------- inbox filter pane ---------- */
+.inbox-filters{width:236px;background:#fff;border-right:1px solid var(--line);flex-shrink:0;overflow-y:auto;padding:14px 12px}
+.fp-head{font-size:15px;font-weight:600;padding:2px 6px 12px}
+.fp-group{border-bottom:1px solid var(--line);padding-bottom:10px;margin-bottom:12px}
+.fp-item{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 9px;border-radius:7px;
+  font-size:13px;color:#374151;cursor:pointer}
+.fp-item:hover{background:var(--hover)}
+.fp-item.on{background:var(--brand-tint);color:var(--brand-text);font-weight:600}
+.fp-count{font-size:11.5px;color:var(--muted);background:#f1f3f5;border-radius:10px;padding:1px 7px;font-weight:600}
+.fp-item.on .fp-count{background:#fff;color:var(--brand-text)}
+.fp-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.6px;color:var(--muted-2);margin:14px 0 6px 6px}
+.inbox-filters select{width:100%}
+
+/* ---------- chat list header ---------- */
+.cl-head{display:flex;align-items:center;gap:8px;padding:12px 13px 8px}
+.cl-head b{font-size:14.5px;font-weight:600}
+.cl-head .cl-num{font-size:11.5px;color:var(--muted);background:#f1f3f5;border-radius:10px;padding:1px 7px;font-weight:600}
+
+/* ---------- quick replies ---------- */
+.composer{position:relative}
+.qr-pop{position:absolute;bottom:56px;left:14px;right:14px;background:#fff;border:1px solid var(--line-strong);
+  border-radius:10px;box-shadow:0 -6px 26px rgba(17,24,39,.13);max-height:250px;overflow-y:auto;z-index:20}
+.qr-item{padding:10px 13px;border-bottom:1px solid var(--line);cursor:pointer;font-size:13px}
+.qr-item:last-child{border-bottom:none}
+.qr-item:hover,.qr-item.on{background:var(--brand-tint)}
+.qr-item b{font-weight:600;margin-right:6px}
+.qr-body{font-size:12px;color:var(--muted);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* ---------- details panel tabs ---------- */
+.ctx-tabs{display:flex;border-bottom:1px solid var(--line);margin:-18px -18px 16px}
+.ctx-tab{flex:1;text-align:center;padding:13px 8px;font-size:13px;font-weight:600;color:var(--muted);
+  cursor:pointer;border-bottom:2px solid transparent}
+.ctx-tab.on{color:var(--brand-text);border-color:var(--brand)}
+.note-card{background:#fffbe8;border:1px solid #f0e2ac;border-radius:9px;padding:10px 12px;font-size:12.5px;margin-top:10px;line-height:1.5}
+.note-card small{display:block;color:#9a8322;font-size:10.5px;margin-top:5px}
+
 </style>
 </head>
 <body>
@@ -291,10 +328,11 @@ tbody tr:hover td{background:var(--hover)}
     <section class="page active" id="page-dashboard"><div class="page-scroll" id="dashScroll"></div></section>
     <section class="page" id="page-inbox">
       <div class="inbox-wrap">
+        <div class="inbox-filters" id="inboxFilters"></div>
         <div class="chat-list">
-          <div class="chat-list-head">
-            <input placeholder="🔍 Search chats…" id="chatSearch" oninput="renderChatList()">
-            <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:8px;justify-content:center" onclick="simulateModal()">🧪 Simulate incoming message</button>
+          <div class="cl-head"><b id="chatListTitle">Open</b><span class="cl-num" id="chatListCount">0</span></div>
+          <div class="chat-list-head" style="padding-top:0">
+            <input placeholder="Search name, phone or company…" id="chatSearch" oninput="onChatSearch(this.value)">
           </div>
           <div class="chats" id="chatListEl"></div>
         </div>
@@ -515,37 +553,106 @@ async function renderDashboard(){
 }
 
 /* ============ inbox ============ */
+state.inbox = { view:'open', owner:'', tag:'', q:'', counts:{} };
+state.quickReplies = [];
+
+const VIEWS = [
+  ['open','Open'], ['closed','Closed'], ['awaiting','Awaiting reply'], ['unread','Unread'], ['all','All'],
+];
+
+function inboxQuery(){
+  const i = state.inbox, p = new URLSearchParams();
+  if(i.view && i.view!=='all') p.set('view', i.view);
+  if(i.owner) p.set('owner', i.owner);
+  if(i.tag) p.set('tag', i.tag);
+  if(i.q) p.set('q', i.q);
+  const s = p.toString();
+  return s ? '?'+s : '';
+}
+
 async function loadInbox(silent){
-  state.contacts = await api('/contacts');
+  const [contacts, counts] = await Promise.all([
+    api('/contacts'+inboxQuery()),
+    api('/inbox/counts'),
+  ]);
+  state.contacts = contacts;
+  state.inbox.counts = counts;
+  if(!state.users.length){ try{ state.users = await api('/users'); }catch{} }
+  renderInboxFilters();
   renderChatList();
   if(state.chatSel && !silent) await openChat(state.chatSel, true);
   else if(state.chatSel && silent){
-    const msgs = await api('/messages/'+state.chatSel);
-    if(msgs.length !== state.msgs.length){ state.msgs=msgs; renderMsgs(); }
+    try{
+      const msgs = await api('/messages/'+state.chatSel);
+      if(msgs.length !== state.msgs.length){ state.msgs=msgs; renderMsgs(); }
+    }catch{}
   }
 }
+
+function renderInboxFilters(){
+  const c = state.inbox.counts||{}, i = state.inbox;
+  const tagSet=[...new Set(state.contacts.flatMap(x=>x.tags||[]))].slice(0,40);
+  $('#inboxFilters').innerHTML = `
+    <div class="fp-head">Inbox</div>
+    <div class="fp-group">
+      ${VIEWS.map(([k,label])=>`
+        <div class="fp-item ${i.view===k?'on':''}" onclick="setInboxView('${k}')">
+          <span>${label}</span><span class="fp-count">${c[k]??0}</span>
+        </div>`).join('')}
+    </div>
+    <div class="fp-group">
+      <div class="fp-item ${i.view==='mine'?'on':''}" onclick="setInboxView('mine')">
+        <span>My chats</span><span class="fp-count">${c.mine??0}</span></div>
+      <div class="fp-item ${i.view==='unassigned'?'on':''}" onclick="setInboxView('unassigned')">
+        <span>Unassigned</span><span class="fp-count">${c.unassigned??0}</span></div>
+    </div>
+    <div class="fp-label">Team member</div>
+    <select onchange="state.inbox.owner=this.value;loadInbox()">
+      <option value="">All members</option>
+      <option value="none" ${i.owner==='none'?'selected':''}>Unassigned</option>
+      ${state.users.map(u=>`<option value="${u.id}" ${String(i.owner)===String(u.id)?'selected':''}>${esc(u.name)}</option>`).join('')}
+    </select>
+    <div class="fp-label">Tags</div>
+    <select onchange="state.inbox.tag=this.value;loadInbox()">
+      <option value="">All tags</option>
+      ${tagSet.map(t=>`<option ${i.tag===t?'selected':''}>${esc(t)}</option>`).join('')}
+    </select>
+    ${(i.owner||i.tag||i.q)?`<button class="btn btn-ghost btn-sm" style="width:100%;margin-top:14px;justify-content:center" onclick="clearInboxFilters()">Clear filters</button>`:''}
+    <button class="btn btn-ghost btn-sm" style="width:100%;margin-top:10px;justify-content:center" onclick="simulateModal()">Simulate incoming</button>`;
+}
+function setInboxView(v){ state.inbox.view=v; loadInbox(); }
+function clearInboxFilters(){ state.inbox.owner=''; state.inbox.tag=''; state.inbox.q=''; const s=$('#chatSearch'); if(s) s.value=''; loadInbox(); }
+let searchTimer=null;
+function onChatSearch(v){ state.inbox.q=v; clearTimeout(searchTimer); searchTimer=setTimeout(loadInbox,260); }
+
 function renderChatList(){
-  const q=($('#chatSearch').value||'').toLowerCase();
-  const withMsgs = state.contacts.filter(c=>c.last_message_at || c.unread>0 || c.id===state.chatSel);
-  const list=(withMsgs.length?withMsgs:state.contacts).filter(c=>!q||c.name.toLowerCase().includes(q)||c.phone.includes(q));
-  $('#chatListEl').innerHTML = list.length? list.map(c=>`
+  const list = state.contacts;
+  const label = (VIEWS.find(v=>v[0]===state.inbox.view)||[])[1]
+    || (state.inbox.view==='mine'?'My chats':state.inbox.view==='unassigned'?'Unassigned':'All chats');
+  $('#chatListTitle').textContent = label;
+  $('#chatListCount').textContent = list.length;
+  $('#chatListEl').innerHTML = list.length ? list.map(c=>`
     <div class="chat-item ${state.chatSel===c.id?'sel':''}" onclick="openChat(${c.id})">
       <div class="avatar">${initials(c.name)}</div>
       <div class="flex1">
-        <div class="cn">${esc(c.name)}<small>${c.last_message_at?c.last_message_at.slice(5,16):''}</small></div>
-        <div class="cp">${esc(c.phone)}</div>
-        <div style="display:flex;gap:4px;margin-top:3px;align-items:center">
+        <div class="cn">${esc(c.name)}<small>${c.last_message_at?String(c.last_message_at).slice(5,16):''}</small></div>
+        <div class="cp">${c.last_direction==='out'?'<span style="color:#34b7f1">✓✓</span> ':''}${esc(c.phone)}</div>
+        <div style="display:flex;gap:4px;margin-top:4px;align-items:center">
+          ${c.status==='closed'?'<span class="tag gray">Resolved</span>':''}
           ${(c.tags||[]).slice(0,2).map(t=>`<span class="tag gray">${esc(t)}</span>`).join('')}
           ${c.unread?`<span class="unread" style="margin-left:auto">${c.unread}</span>`:''}
         </div>
       </div>
-    </div>`).join('') : '<div class="empty">No conversations yet.<br>Add contacts or use the simulator above.</div>';
+    </div>`).join('')
+    : '<div class="empty">No conversations match this filter.</div>';
 }
+
 async function openChat(id, keep){
   state.chatSel=id;
   state.msgs = await api('/messages/'+id);
   const c = state.contacts.find(x=>x.id===id); if(!c) return;
   c.unread=0; renderChatList();
+  const resolved = c.status==='closed';
   $('#convoEl').innerHTML=`
     <div class="convo-head">
       <div class="avatar">${initials(c.name)}</div>
@@ -554,38 +661,116 @@ async function openChat(id, keep){
         <select id="assignSel" onchange="assignChat(this.value)"><option value="">Unassigned</option>
           ${state.users.map(u=>`<option value="${u.id}" ${c.owner_user_id===u.id?'selected':''}>${esc(u.name)}</option>`).join('')}
         </select>
-        <button class="btn btn-ghost btn-sm" onclick="notePrompt()">📝 Note</button>
+        <button class="btn ${resolved?'btn-ghost':'btn-primary'} btn-sm" onclick="toggleResolve(${c.id},'${resolved?'open':'closed'}')">
+          ${resolved?'Reopen':'✓ Resolve'}</button>
       </div>
     </div>
     <div class="msgs" id="msgsEl"></div>
     <div class="composer">
-      <input id="msgInput" placeholder="Type a message… (Enter to send)" onkeydown="if(event.key==='Enter')sendMsg()">
-      <button class="btn btn-primary" onclick="sendMsg()">Send ➤</button>
+      <div id="qrPop" class="qr-pop hidden"></div>
+      <input id="msgInput" placeholder='Type a message, or "/" for quick replies' autocomplete="off"
+        oninput="onComposerInput(this.value)" onkeydown="composerKey(event)">
+      <button class="btn btn-ghost btn-sm" title="Quick replies" onclick="toggleQuickReplies()">/</button>
+      <button class="btn btn-primary" onclick="sendMsg()">Send</button>
     </div>`;
-  if(!state.users.length){ try{ state.users = await api('/users'); openChat(id, true); return; }catch{} }
   renderMsgs(); renderCtx(c);
+  if(!state.quickReplies.length){ try{ state.quickReplies = await api('/quick-replies'); }catch{} }
 }
+
 function renderMsgs(){
   const el=$('#msgsEl'); if(!el) return;
   el.innerHTML = state.msgs.map(m=>{
-    if(m.direction==='note') return `<div class="bubble note">📝 ${esc(m.body)} — ${esc(m.sender_name||'')}</div>`;
-    const tick = m.status==='read'?'✓✓':m.status==='delivered'?'✓✓':m.status==='failed'?'✗':m.status==='demo'?'⏳':'✓';
-    return `<div class="bubble ${m.direction}">${esc(m.body)}<div class="bt">${m.sender_name?esc(m.sender_name)+' · ':''}${(m.created_at||'').slice(11,16)} ${m.direction==='out'?`<span class="ticks">${tick}</span>${m.status==='demo'?' demo':''}${m.status==='failed'?' failed':''}`:''}</div></div>`;
+    if(m.direction==='note') return `<div class="bubble note">${esc(m.body)}${m.sender_name?' — '+esc(m.sender_name):''}</div>`;
+    const tick = m.status==='read'||m.status==='delivered'?'✓✓':m.status==='failed'?'✗':m.status==='demo'?'⏳':'✓';
+    return `<div class="bubble ${m.direction}">${esc(m.body)}<div class="bt">${m.sender_name?esc(m.sender_name)+' · ':''}${String(m.created_at||'').slice(11,16)} ${m.direction==='out'?`<span class="ticks">${tick}</span>${m.status==='demo'?' demo':''}${m.status==='failed'?' failed':''}`:''}</div></div>`;
   }).join('');
   el.scrollTop=el.scrollHeight;
 }
+
+async function toggleResolve(id,status){
+  try{
+    await api('/contacts/'+id+'/status',{method:'POST',body:{status}});
+    toast(status==='closed'?'Conversation resolved':'Conversation reopened');
+    await loadInbox();
+  }catch(e){toast(e.message)}
+}
+
 async function sendMsg(){
   const inp=$('#msgInput'); const txt=inp.value.trim(); if(!txt) return;
-  inp.value='';
+  inp.value=''; hideQuickReplies();
   try{
     const r = await api('/messages/'+state.chatSel,{method:'POST',body:{body:txt}});
     if(r.demo) toast('Saved (demo mode) — connect WhatsApp in Settings to send for real');
     state.msgs = await api('/messages/'+state.chatSel); renderMsgs();
+    loadInbox(true);
   }catch(e){toast(e.message)}
 }
+
+/* --- quick replies --- */
+function matchingReplies(term){
+  const t=(term||'').toLowerCase();
+  return state.quickReplies.filter(q=>!t || q.title.toLowerCase().includes(t) || (q.shortcut||'').includes(t)).slice(0,6);
+}
+function onComposerInput(v){
+  if(v.startsWith('/')) showQuickReplies(v.slice(1)); else hideQuickReplies();
+}
+function toggleQuickReplies(){
+  const p=$('#qrPop'); if(!p) return;
+  p.classList.contains('hidden') ? showQuickReplies('') : hideQuickReplies();
+}
+function showQuickReplies(term){
+  const p=$('#qrPop'); if(!p) return;
+  const list=matchingReplies(term);
+  p.innerHTML = list.length ? list.map((q,idx)=>`
+      <div class="qr-item ${idx===0?'on':''}" onclick="useQuickReply(${q.id})">
+        <b>${esc(q.title)}</b>${q.shortcut?`<span class="tag gray">/${esc(q.shortcut)}</span>`:''}
+        <div class="qr-body">${esc(q.body)}</div>
+      </div>`).join('')
+    : `<div class="qr-item" onclick="quickReplyModal()"><b>No quick replies yet</b>
+       <div class="qr-body">Click to create your first one.</div></div>`;
+  p.classList.remove('hidden');
+}
+function hideQuickReplies(){ const p=$('#qrPop'); if(p) p.classList.add('hidden'); }
+function composerKey(e){
+  const p=$('#qrPop');
+  if(p && !p.classList.contains('hidden')){
+    if(e.key==='Escape'){ hideQuickReplies(); return; }
+    if(e.key==='Enter'){
+      const first=p.querySelector('.qr-item');
+      if(first && first.getAttribute('onclick')?.includes('useQuickReply')){ first.click(); e.preventDefault(); return; }
+    }
+  }
+  if(e.key==='Enter') sendMsg();
+}
+async function useQuickReply(id){
+  const q=state.quickReplies.find(x=>x.id===id); if(!q) return;
+  const c=state.contacts.find(x=>x.id===state.chatSel);
+  $('#msgInput').value = q.body.replace(/\{\{name\}\}/gi, c? c.name.split(' ')[0] : '');
+  hideQuickReplies(); $('#msgInput').focus();
+  try{ await api('/quick-replies/'+id,{method:'PATCH',body:{used:true}}); }catch{}
+}
+function quickReplyModal(){
+  hideQuickReplies();
+  openModal(`<h3>New quick reply</h3>
+  <div class="form-row"><label>Title</label><input id="qrTitle" placeholder="e.g. Pricing enquiry"></div>
+  <div class="form-row"><label>Shortcut (optional)</label><input id="qrShort" placeholder="price"></div>
+  <div class="form-row"><label>Message — use {{name}} to insert the contact's first name</label>
+    <textarea id="qrBody" rows="4" placeholder="Hi {{name}}, here is our price list…"></textarea></div>
+  <div class="modal-actions"><button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+  <button class="btn btn-primary" onclick="saveQuickReply()">Save</button></div>`);
+}
+async function saveQuickReply(){
+  try{
+    await api('/quick-replies',{method:'POST',body:{
+      title:$('#qrTitle').value, body:$('#qrBody').value, shortcut:$('#qrShort').value}});
+    state.quickReplies = await api('/quick-replies');
+    closeModal(); toast('Quick reply saved');
+  }catch(e){toast(e.message)}
+}
+
 async function assignChat(uid){
   await api('/contacts/'+state.chatSel,{method:'PATCH',body:{owner_user_id: uid?Number(uid):null}});
-  toast('Assignment updated');
+  toast('Assignment updated'); loadInbox(true);
 }
 function notePrompt(){
   openModal(`<h3>Internal note</h3><div class="form-row"><textarea id="noteTxt" rows="3" placeholder="Visible only to your team"></textarea></div>
@@ -595,35 +780,59 @@ function notePrompt(){
 async function saveNote(){
   const t=$('#noteTxt').value.trim(); if(!t){closeModal();return}
   await api('/messages/'+state.chatSel,{method:'POST',body:{body:t,direction:'note'}});
-  closeModal(); state.msgs=await api('/messages/'+state.chatSel); renderMsgs(); toast('Note added');
+  closeModal(); state.msgs=await api('/messages/'+state.chatSel); renderMsgs(); renderCtx(state.contacts.find(x=>x.id===state.chatSel)); toast('Note added');
 }
+
+/* --- details panel --- */
+state.ctxTab='details';
+function ctxTab(t){ state.ctxTab=t; renderCtx(state.contacts.find(x=>x.id===state.chatSel)); }
 function renderCtx(c){
+  if(!c){ $('#ctxPanel').innerHTML=''; return; }
+  const notes = state.msgs.filter(m=>m.direction==='note');
+  const tab = state.ctxTab;
   $('#ctxPanel').innerHTML=`
-    <div class="ctx-center"><div class="avatar">${initials(c.name)}</div><b style="font-size:14px">${esc(c.name)}</b>
-    <div style="font-size:12px;color:var(--muted)">${esc(c.phone)}</div></div>
-    <h4>Details</h4>
-    <div class="kv"><span>Company</span><b>${esc(c.company||'—')}</b></div>
-    <div class="kv"><span>Source</span><b>${esc(c.source)}</b></div>
-    <h4>Lead stage</h4>
-    <select style="width:100%" onchange="setStage(${c.id},this.value)">
-      ${['New Lead','Qualified','Negotiation','Won','Cold'].map(s=>`<option ${c.stage===s?'selected':''}>${s}</option>`).join('')}
-    </select>
-    <h4>Tags</h4>
-    <div id="tagBox">${(c.tags||[]).map(t=>`<span class="tag green">${esc(t)}</span>`).join('')||'<span style="font-size:12px;color:var(--muted)">No tags</span>'}</div>
-    <div style="display:flex;gap:6px;margin-top:8px"><input id="newTag" placeholder="Add tag" style="flex:1;padding:6px 9px;font-size:12px">
-    <button class="btn btn-ghost btn-sm" onclick="addTag(${c.id})">＋</button></div>`;
+    <div class="ctx-tabs">
+      <div class="ctx-tab ${tab==='details'?'on':''}" onclick="ctxTab('details')">Details</div>
+      <div class="ctx-tab ${tab==='notes'?'on':''}" onclick="ctxTab('notes')">Notes ${notes.length?`(${notes.length})`:''}</div>
+    </div>
+    ${tab==='details'?`
+      <div class="ctx-center"><div class="avatar">${initials(c.name)}</div>
+        <b style="font-size:14.5px">${esc(c.name)}</b>
+        <div style="font-size:12px;color:var(--muted)">${esc(c.phone)}</div></div>
+      <h4>Details</h4>
+      <div class="kv"><span>Company</span><b>${esc(c.company||'—')}</b></div>
+      <div class="kv"><span>Source</span><b>${esc(c.source)}</b></div>
+      <div class="kv"><span>Status</span><b>${c.status==='closed'?'Resolved':'Open'}</b></div>
+      <div class="kv"><span>Owner</span><b>${esc((state.users.find(u=>u.id===c.owner_user_id)||{}).name||'Unassigned')}</b></div>
+      <h4>Lead stage</h4>
+      <select style="width:100%" onchange="setStage(${c.id},this.value)">
+        ${['New Lead','Qualified','Negotiation','Won','Cold'].map(s=>`<option ${c.stage===s?'selected':''}>${s}</option>`).join('')}
+      </select>
+      <h4>Tags</h4>
+      <div>${(c.tags||[]).map(t=>`<span class="tag green">${esc(t)}</span>`).join('')||'<span style="font-size:12px;color:var(--muted)">No tags</span>'}</div>
+      <div style="display:flex;gap:6px;margin-top:9px"><input id="newTag" placeholder="Add tag" style="flex:1;padding:7px 9px;font-size:12px">
+      <button class="btn btn-ghost btn-sm" onclick="addTag(${c.id})">Add</button></div>`
+    :`
+      <div style="margin-top:6px">
+        <button class="btn btn-ghost btn-sm" style="width:100%;justify-content:center" onclick="notePrompt()">Add note</button>
+      </div>
+      ${notes.length? notes.map(n=>`
+        <div class="note-card">${esc(n.body)}
+          <small>${esc(n.sender_name||'')}${n.created_at?' · '+String(n.created_at).slice(0,16):''}</small>
+        </div>`).join('') : '<div class="empty" style="padding:30px 10px">No notes yet</div>'}`}`;
 }
-async function setStage(id,st){await api('/contacts/'+id,{method:'PATCH',body:{stage:st}});toast('Stage → '+st)}
+async function setStage(id,st){await api('/contacts/'+id,{method:'PATCH',body:{stage:st}});toast('Stage → '+st);loadInbox(true)}
 async function addTag(id){
   const t=$('#newTag').value.trim(); if(!t) return;
   const c=state.contacts.find(x=>x.id===id); const tags=[...(c.tags||[]),t];
-  await api('/contacts/'+id,{method:'PATCH',body:{tags}}); c.tags=tags; renderCtx(c); toast('Tag added');
+  await api('/contacts/'+id,{method:'PATCH',body:{tags}}); c.tags=tags; renderCtx(c); renderChatList(); toast('Tag added');
 }
+
 function simulateModal(){
-  openModal(`<h3>🧪 Simulate incoming WhatsApp message</h3>
-  <div style="font-size:12.5px;color:var(--muted);margin-bottom:12px">Pretends a customer messaged you — great for testing the inbox and bots before connecting the real WhatsApp API.</div>
-  <div class="form-row"><label>From (existing contact or new number)</label>
-    <select id="simContact"><option value="">➕ New contact</option>
+  openModal(`<h3>Simulate incoming WhatsApp message</h3>
+  <div style="font-size:12.5px;color:var(--muted);margin-bottom:14px">Pretends a customer messaged you — for testing the inbox and bots before WhatsApp is connected.</div>
+  <div class="form-row"><label>From</label>
+    <select id="simContact"><option value="">＋ New contact</option>
     ${state.contacts.map(c=>`<option value="${c.id}">${esc(c.name)} (${esc(c.phone)})</option>`).join('')}</select></div>
   <div class="form-row" id="simNewRow"><label>New contact name & phone</label>
     <div style="display:flex;gap:8px"><input id="simName" placeholder="Name" style="flex:1"><input id="simPhone" placeholder="+9715…" style="flex:1"></div></div>
@@ -637,7 +846,7 @@ async function doSimulate(){
     const cid=$('#simContact').value;
     const r = await api('/simulate-incoming',{method:'POST',body:{
       contactId: cid?Number(cid):undefined, phone:$('#simPhone')?.value, name:$('#simName')?.value, body:$('#simBody').value}});
-    closeModal(); toast(r.botReplied?'Message received — bot auto-replied 🤖':'Message received');
+    closeModal(); toast(r.botReplied?'Message received — bot auto-replied':'Message received');
     await loadInbox();
   }catch(e){toast(e.message)}
 }
