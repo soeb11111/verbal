@@ -240,12 +240,24 @@ async function ensureSchema() {
     );
   `);
 
+  await safe(`
+    CREATE TABLE IF NOT EXISTS password_resets (
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      token_hash TEXT NOT NULL,
+      expires_at TIMESTAMP(3) NOT NULL,
+      used BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at TIMESTAMP(3) NOT NULL DEFAULT (now() AT TIME ZONE 'utc')
+    );
+  `);
+
   // Idempotent column top-ups (safe if the tables predate a column).
   const alters = [
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS last_direction TEXT`,
     `ALTER TABLE contacts ADD COLUMN IF NOT EXISTS closed_at TIMESTAMP(3)`,
     `ALTER TABLE companies ADD COLUMN IF NOT EXISTS notes TEXT DEFAULT ''`,
     `ALTER TABLE messages ADD COLUMN IF NOT EXISTS wa_message_id TEXT`,
+    `ALTER TABLE campaigns ADD COLUMN IF NOT EXISTS scheduled_at TIMESTAMP(3)`,
   ];
   for (const a of alters) { try { await query(a); } catch (_) {} }
 
@@ -257,6 +269,8 @@ async function ensureSchema() {
     `CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id)`,
     `CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`,
     `CREATE INDEX IF NOT EXISTS idx_quick_replies_company ON quick_replies(company_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_password_resets_token ON password_resets(token_hash)`,
+    `CREATE INDEX IF NOT EXISTS idx_campaigns_scheduled ON campaigns(status, scheduled_at)`,
   ];
   for (const i of idx) { try { await query(i); } catch (_) {} }
 

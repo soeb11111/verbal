@@ -254,6 +254,8 @@ function fmtTime(ts){ if(!ts)return''; const d=new Date(ts.replace(' ','T')+'Z')
   return d.toLocaleDateString([], {day:'2-digit',month:'short'}); }
 function fmtDate(ts){ if(!ts)return'—'; const d=new Date(ts.replace(' ','T')+'Z'); if(isNaN(d))return'—';
   return d.toLocaleDateString([], {day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDateTime(ts){ if(!ts)return'—'; const d=new Date(ts.replace(' ','T')+'Z'); if(isNaN(d))return'—';
+  return d.toLocaleDateString([], {day:'2-digit',month:'short'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
 
 function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type||'');t.textContent=msg;
   $('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},3200);}
@@ -281,13 +283,37 @@ function logout(){localStorage.removeItem(LS_TOKEN);localStorage.removeItem(LS_A
 
 /* ============================ Boot ============================ */
 window.addEventListener('DOMContentLoaded',boot);
-window.addEventListener('hashchange',()=>{ if(state.me){ const v=(location.hash||'#/dashboard').slice(2)||'dashboard'; state.view=v; renderApp(); }});
+window.addEventListener('hashchange',()=>{
+  if(location.hash.startsWith('#/reset/')){ renderReset(decodeURIComponent(location.hash.slice(8))); return; }
+  if(state.me){ const v=(location.hash||'#/dashboard').slice(2)||'dashboard'; state.view=v; renderApp(); }
+});
 window.addEventListener('unhandledrejection',e=>{ console.error('unhandledrejection',e.reason); });
 
 async function boot(){
+  if(location.hash.startsWith('#/reset/')){ renderReset(decodeURIComponent(location.hash.slice(8))); return; }
   if(!state.token){ renderAuth(); return; }
   try{ state.me=await api('GET','/api/me'); const v=(location.hash||'#/dashboard').slice(2)||'dashboard'; state.view=v; renderApp(); }
   catch(e){ renderAuth(); }
+}
+
+function renderReset(token){
+  $('#root').innerHTML=`
+  <div class="auth-wrap"><div class="auth-card">
+    <div class="auth-logo"><span class="tick">✔✔</span> Verbal</div>
+    <div class="auth-sub">Choose a new password</div>
+    <div class="err" id="reset-err"></div>
+    <form id="reset-form">
+      <div class="field"><label>New password</label><input class="input" name="password" type="password" minlength="6" required></div>
+      <div class="field"><label>Confirm password</label><input class="input" name="confirm" type="password" minlength="6" required></div>
+      <button class="btn primary" style="width:100%" type="submit">Reset password</button>
+    </form>
+  </div></div>`;
+  $('#reset-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');
+    const pw=f.querySelector('[name="password"]').value, cf=f.querySelector('[name="confirm"]').value;
+    if(pw!==cf){$('#reset-err').textContent='Passwords do not match';return;}
+    btn.disabled=true;
+    try{ await apiPublic('POST','/api/auth/reset',{token,password:pw}); toast('Password reset — please sign in','ok'); location.hash=''; renderAuth(); }
+    catch(err){$('#reset-err').textContent=err.message;btn.disabled=false;}};
 }
 
 /* ============================ Auth screen ============================ */
@@ -310,6 +336,14 @@ async function renderAuth(){
       <div class="field"><label>Email</label><input class="input" name="email" type="email" required></div>
       <div class="field"><label>Password</label><input class="input" name="password" type="password" required></div>
       <button class="btn primary" style="width:100%" type="submit">Sign in</button>
+      <div style="text-align:center;margin-top:12px"><a href="#" id="forgot-link">Forgot password?</a></div>
+    </form>
+    <form id="forgot-form" class="hidden">
+      <p class="mut" style="margin-top:0;font-size:13px">Enter your email and we'll send you a link to reset your password.</p>
+      <div class="field"><label>Email</label><input class="input" name="email" type="email" required></div>
+      <button class="btn primary" style="width:100%" type="submit">Send reset link</button>
+      <div style="text-align:center;margin-top:12px"><a href="#" id="back-login">Back to sign in</a></div>
+      <div id="forgot-msg" style="margin-top:14px"></div>
     </form>
     <form id="signup-form" class="${tab==='signup'?'':'hidden'}">
       <div class="field"><label>Workspace / company name</label><input class="input" name="companyName" required></div>
@@ -324,8 +358,17 @@ async function renderAuth(){
     $$('.auth-tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
     $('#login-form').classList.toggle('hidden',b.dataset.tab!=='login');
     $('#signup-form').classList.toggle('hidden',b.dataset.tab!=='signup');
+    $('#forgot-form').classList.add('hidden');
     $('#auth-err').textContent='';
   });
+  $('#forgot-link').onclick=(e)=>{e.preventDefault();$('#login-form').classList.add('hidden');$('#forgot-form').classList.remove('hidden');$('#auth-err').textContent='';};
+  $('#back-login').onclick=(e)=>{e.preventDefault();$('#forgot-form').classList.add('hidden');$('#login-form').classList.remove('hidden');$('#forgot-msg').innerHTML='';};
+  $('#forgot-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');const email=f.querySelector('[name="email"]').value.trim();btn.disabled=true;
+    try{const d=await apiPublic('POST','/api/auth/forgot',{email});
+      let html='<div class="firstrun-note">'+esc(d.message||'If an account exists, a reset link has been sent.')+'</div>';
+      if(d.demo&&d.resetUrl){html+='<div class="mut" style="font-size:12px;margin-top:8px">Demo mode (no email configured): <a href="'+esc(d.resetUrl)+'">open your reset link</a></div>';}
+      $('#forgot-msg').innerHTML=html;btn.disabled=false;
+    }catch(err){$('#forgot-msg').innerHTML='<div class="err">'+esc(err.message)+'</div>';btn.disabled=false;}};
   $('#login-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');const val=n=>f.querySelector('[name="'+n+'"]').value;btn.disabled=true;
     try{const d=await apiPublic('POST','/api/auth/login',{email:val('email').trim(),password:val('password')});setToken(d.token);state.me=await api('GET','/api/me');location.hash='#/dashboard';state.view='dashboard';renderApp();}
     catch(err){$('#auth-err').textContent=err.message;btn.disabled=false;}};
@@ -347,6 +390,7 @@ const NAV=[
     {v:'bots',ic:'🤖',lbl:'Bot studio',mod:'automation'},
   ]},
   {grp:'Manage',items:[
+    {v:'analytics',ic:'📊',lbl:'Analytics'},
     {v:'team',ic:'🧑‍🤝‍🧑',lbl:'Team'},
     {v:'settings',ic:'⚙️',lbl:'Settings'},
   ]},
@@ -359,6 +403,7 @@ const NAV_PLATFORM={grp:'Platform',items:[
 const TITLES={dashboard:['Home','Overview of your workspace'],chats:['Chats','Your WhatsApp inbox'],
   customers:['Customers','Your contact database'],broadcast:['Broadcast','Send templates to segments'],
   templates:['Templates','WhatsApp message templates'],bots:['Bot studio','Automated replies'],
+  analytics:['Analytics','Team performance & response times'],
   team:['Team','Manage your team members'],settings:['Settings','Workspace configuration'],
   clients:['Clients','All client workspaces'],'platform-settings':['Platform settings','Platform configuration']};
 
@@ -407,7 +452,7 @@ function stopImpersonate(){ setToken(state.adminToken); localStorage.removeItem(
 function renderView(){
   const el=$('#content'); el.innerHTML='<div class="spinner"></div>';
   const map={dashboard:viewDashboard,chats:viewChats,customers:viewCustomers,broadcast:viewBroadcast,
-    templates:viewTemplates,bots:viewBots,team:viewTeam,settings:viewSettings,clients:viewClients,'platform-settings':viewPlatformSettings};
+    templates:viewTemplates,bots:viewBots,analytics:viewAnalytics,team:viewTeam,settings:viewSettings,clients:viewClients,'platform-settings':viewPlatformSettings};
   (map[state.view]||viewDashboard)(el);
 }
 
@@ -720,10 +765,14 @@ async function viewBroadcast(el){
     const camps=(await api('GET','/api/campaigns')).campaigns;
     const canLaunch=state.me.user.role!=='agent'||state.me.isSuperAdmin;
     el.innerHTML=`<div class="page-head"><h1>Broadcast</h1>${canLaunch?'<button class="btn primary" id="new-camp">📣 New broadcast</button>':''}</div>
-    <div class="card"><table class="tbl"><thead><tr><th>Campaign</th><th>Template</th><th>Segment</th><th>Audience</th><th>Sent</th><th>Delivered</th><th>Failed</th><th>Status</th><th>Date</th></tr></thead>
-      <tbody>${camps.map(c=>`<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.template_name||'—')}</td><td>${esc(c.segment||'—')}</td>
-        <td>${c.audience}</td><td>${c.sent}</td><td>${c.delivered}</td><td>${c.failed}</td><td><span class="chip ${c.status==='sent'?'green':''}">${esc(c.status)}</span></td><td class="mut">${fmtDate(c.created_at)}</td></tr>`).join('')}</tbody></table>
+    <div class="card"><table class="tbl"><thead><tr><th>Campaign</th><th>Template</th><th>Segment</th><th>Audience</th><th>Sent</th><th>Delivered</th><th>Failed</th><th>Status</th><th>When</th>${canLaunch?'<th></th>':''}</tr></thead>
+      <tbody>${camps.map(c=>{const st=c.status;const chip=st==='sent'?'green':st==='scheduled'?'amber':st==='cancelled'||st==='failed'?'red':'';
+        const when=st==='scheduled'?('⏰ '+fmtDateTime(c.scheduled_at)):fmtDate(c.created_at);
+        return `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.template_name||'—')}</td><td>${esc(c.segment||'—')}</td>
+        <td>${c.audience}</td><td>${c.sent}</td><td>${c.delivered}</td><td>${c.failed}</td><td><span class="chip ${chip}">${esc(st)}</span></td><td class="mut">${when}</td>
+        ${canLaunch?`<td style="text-align:right">${st==='scheduled'?`<button class="btn sm danger" data-cancel="${c.id}">Cancel</button>`:''}</td>`:''}</tr>`;}).join('')}</tbody></table>
       ${!camps.length?'<div class="empty">No campaigns yet.</div>':''}</div>`;
+    $$('[data-cancel]').forEach(b=>b.onclick=async()=>{if(!confirm('Cancel this scheduled broadcast?'))return;try{await api('PATCH','/api/campaigns/'+b.dataset.cancel,{status:'cancelled'});toast('Broadcast cancelled','ok');viewBroadcast(el);}catch(e){toast(e.message,'err');}});
     const nc=$('#new-camp'); if(nc)nc.onclick=async()=>{
       const tpls=(await api('GET','/api/templates')).templates.filter(t=>t.status==='approved');
       if(!tpls.length){toast('Create and approve a template first','err');return;}
@@ -732,12 +781,18 @@ async function viewBroadcast(el){
         <div class="field"><label>Template (approved)</label><select class="select" id="b-tpl">${tpls.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></div>
         <div class="field"><label>Segment</label><select class="select" id="b-seg"><option value="all">All contacts</option><option value="tag">By tag</option><option value="stage">By lead stage</option></select></div>
         <div class="field hidden" id="b-tag-f"><label>Tag</label><input class="input" id="b-tag"></div>
-        <div class="field hidden" id="b-stage-f"><label>Stage</label><select class="select" id="b-stage">${STAGES.map(s=>`<option>${s}</option>`).join('')}</select></div>`,
+        <div class="field hidden" id="b-stage-f"><label>Stage</label><select class="select" id="b-stage">${STAGES.map(s=>`<option>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Send</label><select class="select" id="b-when"><option value="now">Immediately</option><option value="later">Schedule for later</option></select></div>
+        <div class="field hidden" id="b-sched-f"><label>Scheduled time</label><input class="input" id="b-sched" type="datetime-local"></div>`,
         [{label:'Cancel',cls:'btn',close:true},{label:'Launch',cls:'btn primary',act:async()=>{
           const type=$('#b-seg').value; const seg={type}; if(type==='tag')seg.value=$('#b-tag').value.trim(); if(type==='stage')seg.value=$('#b-stage').value;
-          try{const r=await api('POST','/api/campaigns',{name:$('#b-name').value.trim(),template_id:parseInt($('#b-tpl').value,10),segment:seg});closeModal();toast(`Broadcast sent to ${r.campaign.audience} contacts`,'ok');viewBroadcast(el);}catch(e){toast(e.message,'err');}
+          const payload={name:$('#b-name').value.trim(),template_id:parseInt($('#b-tpl').value,10),segment:seg};
+          if($('#b-when').value==='later'){const dv=$('#b-sched').value;if(!dv){toast('Pick a schedule time','err');return;}payload.scheduled_at=new Date(dv).toISOString();}
+          try{const r=await api('POST','/api/campaigns',payload);closeModal();
+            toast(r.campaign.status==='scheduled'?`Broadcast scheduled for ${r.campaign.audience} contacts`:`Broadcast sent to ${r.campaign.audience} contacts`,'ok');viewBroadcast(el);}catch(e){toast(e.message,'err');}
         }}]);
       $('#b-seg').onchange=(e)=>{$('#b-tag-f').classList.toggle('hidden',e.target.value!=='tag');$('#b-stage-f').classList.toggle('hidden',e.target.value!=='stage');};
+      $('#b-when').onchange=(e)=>{$('#b-sched-f').classList.toggle('hidden',e.target.value!=='later');};
     };
   }catch(e){el.innerHTML=errBox(e);}
 }
@@ -771,6 +826,32 @@ async function viewBots(el){
       }}]);
     const bt=$('#bot-trig'); // set inside modal via delegation
     document.addEventListener('change',(ev)=>{if(ev.target&&ev.target.id==='bot-trig'){const f=$('#bot-kw-f');if(f)f.classList.toggle('hidden',ev.target.value!=='keyword');}});
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Analytics ============================ */
+function fmtDuration(sec){ if(!sec||sec<=0)return '—'; if(sec<60)return Math.round(sec)+'s'; if(sec<3600)return Math.round(sec/60)+'m'; return (sec/3600).toFixed(1)+'h'; }
+async function viewAnalytics(el){
+  try{
+    const a=await api('GET','/api/analytics');
+    const maxSent=Math.max(1,...a.agents.map(x=>x.sent));
+    el.innerHTML=`<div class="page-head"><h1>Analytics</h1></div>
+      <div class="kpis">
+        ${kpi('Avg. response time',fmtDuration(a.avgResponseSeconds))}
+        ${kpi('Conversations',a.conversationsOpened)}
+        ${kpi('Replied',a.conversationsReplied)}
+        ${kpi('Reply rate',a.replyRate+'%')}
+        ${kpi('Inbound (30d)',a.inbound30d)}
+        ${kpi('Outbound (30d)',a.outbound30d)}
+      </div>
+      <div class="card pad"><div style="font-weight:600;margin-bottom:12px">Agent performance</div>
+        ${a.agents.length?`<table class="tbl"><thead><tr><th>Agent</th><th>Role</th><th>Messages sent</th><th>Conversations resolved</th><th>Assigned contacts</th></tr></thead>
+          <tbody>${a.agents.map(u=>`<tr>
+            <td><div class="sr-flex"><div class="avatar sm">${initials(u.name)}</div><b>${esc(u.name)}</b></div></td>
+            <td><span class="chip">${esc(u.role)}</span></td>
+            <td><div class="sr-flex" style="gap:8px"><b>${u.sent}</b><div class="usage-bar" style="flex:1;max-width:120px"><span style="width:${Math.round(u.sent/maxSent*100)}%"></span></div></div></td>
+            <td>${u.resolved}</td><td>${u.assigned}</td></tr>`).join('')}</tbody></table>`
+          :'<div class="empty">No agent activity yet.</div>'}</div>`;
   }catch(e){el.innerHTML=errBox(e);}
 }
 

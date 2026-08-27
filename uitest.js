@@ -85,7 +85,7 @@ async function main() {
   });
 
   await test('every page renders without errors', async () => {
-    for (const v of ['chats', 'customers', 'broadcast', 'templates', 'bots', 'team', 'settings', 'dashboard']) {
+    for (const v of ['chats', 'customers', 'broadcast', 'templates', 'bots', 'analytics', 'team', 'settings', 'dashboard']) {
       clickNav(v);
       await waitFor(() => { const c = $('#content'); return c && !c.querySelector('.spinner') && c.innerHTML.length > 20; });
       await sleep(120);
@@ -117,6 +117,33 @@ async function main() {
     $('.qr-item').click();
     await waitFor(() => $('#composer-input').value && $('#composer-input').value[0] !== '/');
     assert.ok($('#composer-input').value.length > 1);
+  });
+
+  await test('forgot-password UI shows a reset link, and the reset screen resets', async () => {
+    // log out to reach the auth screen
+    window.localStorage.removeItem('verbal_token');
+    window.location.hash = '';
+    window.dispatchEvent(new window.Event('hashchange'));
+    // trigger boot's auth render by reloading render path
+    const bootFn = window.eval('typeof boot');
+    // Re-render auth by calling renderAuth via a fresh navigation
+    window.eval('renderAuth()');
+    await waitFor(() => $('#forgot-link'));
+    $('#forgot-link').click();
+    await waitFor(() => !$('#forgot-form').classList.contains('hidden'));
+    $('#forgot-form input[name="email"]').value = 'uma@ui.com';
+    $('#forgot-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    const link = await waitFor(() => $('#forgot-msg a'));
+    const href = link.getAttribute('href');
+    assert.ok(href && href.indexOf('/reset/') !== -1, 'reset link present');
+    const tokenPart = href.split('/reset/')[1];
+    // Go to reset screen and set a new password
+    window.eval('renderReset(' + JSON.stringify(tokenPart) + ')');
+    await waitFor(() => $('#reset-form'));
+    $('#reset-form input[name="password"]').value = 'brandnew123';
+    $('#reset-form input[name="confirm"]').value = 'brandnew123';
+    $('#reset-form').dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
+    await waitFor(() => $('#login-form')); // back on auth after success
   });
 
   server.close();

@@ -7,6 +7,7 @@ const crypto = require('crypto');
 const express = require('express');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
+const nodemailer = require('nodemailer');
 const db = require('./db');
 const wa = require('./whatsapp');
 
@@ -37,6 +38,48 @@ function missingProdVars() {
   if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) missing.push('JWT_SECRET (32+ chars)');
   return missing;
 }
+
+// ---------------------------------------------------------------------------
+// Email — provider-agnostic SMTP. When SMTP_* env vars are set, real emails are
+// sent. Otherwise the app runs in "demo delivery": the message is logged and the
+// reset link is surfaced to the caller so the flow stays usable without infra.
+// ---------------------------------------------------------------------------
+let mailer = null;
+const SMTP_CONFIGURED = !!(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+function getMailer() {
+  if (!SMTP_CONFIGURED) return null;
+  if (!mailer) {
+    mailer = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || '587', 10),
+      secure: String(process.env.SMTP_SECURE || '') === 'true',
+      auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    });
+  }
+  return mailer;
+}
+async function sendEmail(to, subject, text) {
+  const m = getMailer();
+  if (!m) { console.log(`[verbal] (demo email) to=${to} :: ${subject}\n${text}`); return { demo: true }; }
+  await m.sendMail({ from: process.env.SMTP_FROM || `Verbal <${process.env.SMTP_USER}>`, to, subject, text });
+  return { sent: true };
+}
+
+// ---------------------------------------------------------------------------
+// Simple in-memory rate limiter (per key). Login/forgot are only served by the
+// API instance, so a per-process store is sufficient.
+// ---------------------------------------------------------------------------
+const rlStore = new Map();
+function rateLimit({ key, max, windowMs }) {
+  const now = Date.now();
+  let e = rlStore.get(key);
+  if (!e || now > e.reset) { e = { count: 0, reset: now + windowMs }; rlStore.set(key, e); }
+  e.count += 1;
+  const remaining = Math.max(0, max - e.count);
+  return { blocked: e.count > max, remaining, retryAfter: Math.ceil((e.reset - now) / 1000) };
+}
+function rlClear(key) { rlStore.delete(key); }
+setInterval(() => { const now = Date.now(); for (const [k, v] of rlStore) if (now > v.reset) rlStore.delete(k); }, 60000).unref();
 
 // ---------------------------------------------------------------------------
 // Setup gate — must run BEFORE static files. In production, if critical env
@@ -220,6 +263,10 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'email and password are required' });
+    const ip = (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+    const rlKey = 'login:' + ip + ':' + String(email).toLowerCase();
+    const rl = rateLimit({ key: rlKey, max: 5, windowMs: 15 * 60 * 1000 });
+    if (rl.blocked) return res.status(429).json({ error: `Too many sign-in attempts. Try again in ${Math.ceil(rl.retryAfter / 60)} minute(s).` });
     const user = await db.one('SELECT * FROM users WHERE lower(email)=lower($1)', [email]);
     if (!user) return res.status(401).json({ error: 'Invalid email or password' });
     const ok = await bcrypt.compare(String(password), user.password_hash);
@@ -229,9 +276,55 @@ app.post('/api/auth/login', async (req, res) => {
     if (company.status === 'suspended' && !isSuperEmail(user.email)) {
       return res.status(403).json({ error: 'This workspace is suspended. Please contact support.' });
     }
+    rlClear(rlKey);
     const token = signToken(user);
     res.json({ token, user: publicUser(user), company: publicCompany(company), isSuperAdmin: isSuperEmail(user.email) });
   } catch (e) { console.error(e); res.status(500).json({ error: 'login failed' }); }
+});
+
+// ---- Password reset (self-service) ---------------------------------------
+app.post('/api/auth/forgot', async (req, res) => {
+  try {
+    const { email } = req.body || {};
+    if (!email) return res.status(400).json({ error: 'email is required' });
+    const ip = (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim();
+    const rl = rateLimit({ key: 'forgot:' + ip, max: 5, windowMs: 15 * 60 * 1000 });
+    if (rl.blocked) return res.status(429).json({ error: 'Too many requests. Please try again later.' });
+
+    const generic = { ok: true, message: 'If an account exists for that email, a reset link has been sent.' };
+    const user = await db.one('SELECT * FROM users WHERE lower(email)=lower($1)', [email]);
+    if (!user) return res.json(generic);
+
+    const raw = crypto.randomBytes(32).toString('hex');
+    const hash = crypto.createHash('sha256').update(raw).digest('hex');
+    await db.query('UPDATE password_resets SET used=TRUE WHERE user_id=$1 AND used=FALSE', [user.id]);
+    await db.query(
+      `INSERT INTO password_resets (user_id, token_hash, expires_at)
+       VALUES ($1,$2,(now() AT TIME ZONE 'utc') + interval '1 hour')`, [user.id, hash]);
+    const resetUrl = `${clientLoginUrl(req).replace(/\/$/, '')}/#/reset/${raw}`;
+    const delivery = await sendEmail(user.email, 'Reset your Verbal password',
+      `Hello ${user.name},\n\nReset your password using the link below (valid for 1 hour):\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`);
+    // In demo delivery (no SMTP), return the link so the flow is usable.
+    const out = Object.assign({}, generic);
+    if (delivery && delivery.demo) { out.demo = true; out.resetUrl = resetUrl; }
+    res.json(out);
+  } catch (e) { console.error(e); res.status(500).json({ error: 'request failed' }); }
+});
+
+app.post('/api/auth/reset', async (req, res) => {
+  try {
+    const { token, password } = req.body || {};
+    if (!token || !password) return res.status(400).json({ error: 'token and password are required' });
+    if (String(password).length < 6) return res.status(400).json({ error: 'password must be at least 6 characters' });
+    const hash = crypto.createHash('sha256').update(String(token)).digest('hex');
+    const row = await db.one(
+      `SELECT * FROM password_resets WHERE token_hash=$1 AND used=FALSE AND expires_at > (now() AT TIME ZONE 'utc')`, [hash]);
+    if (!row) return res.status(400).json({ error: 'This reset link is invalid or has expired.' });
+    const newHash = await bcrypt.hash(String(password), 10);
+    await db.query('UPDATE users SET password_hash=$1 WHERE id=$2', [newHash, row.user_id]);
+    await db.query('UPDATE password_resets SET used=TRUE WHERE id=$1', [row.id]);
+    res.json({ ok: true });
+  } catch (e) { console.error(e); res.status(500).json({ error: 'reset failed' }); }
 });
 
 // ===========================================================================
@@ -567,39 +660,113 @@ app.get('/api/campaigns', auth, requireModule('broadcast'), async (req, res) => 
   res.json({ campaigns: rows });
 });
 app.post('/api/campaigns', auth, requireModule('broadcast'), requireRole('owner', 'admin'), async (req, res) => {
-  const { name, template_id, segment } = req.body || {};
+  const { name, template_id, segment, scheduled_at } = req.body || {};
   if (!name || !template_id) return res.status(400).json({ error: 'name and template are required' });
   const tmpl = await db.one('SELECT * FROM templates WHERE id=$1 AND company_id=$2', [template_id, req.company.id]);
   if (!tmpl) return res.status(404).json({ error: 'template not found' });
 
-  const segType = segment && segment.type ? segment.type : 'all';
-  const segVal = segment && segment.value;
-  let where = 'company_id=$1'; const params = [req.company.id]; let label = 'All contacts';
-  if (segType === 'tag') { where += ' AND tags LIKE $2'; params.push(`%"${segVal}"%`); label = `Tag: ${segVal}`; }
-  else if (segType === 'stage') { where += ' AND stage=$2'; params.push(segVal); label = `Stage: ${segVal}`; }
-  const recipients = (await db.query(`SELECT * FROM contacts WHERE ${where}`, params)).rows;
+  const seg = resolveSegment(segment);
+  const recipients = (await db.query(`SELECT * FROM contacts WHERE ${seg.where}`, [req.company.id, ...seg.params])).rows;
   if (!recipients.length) return res.status(400).json({ error: 'The selected segment has no contacts. Choose a different segment.' });
 
-  const configured = wa.isConfigured(req.company);
-  let sent = 0; let delivered = 0; let failed = 0;
+  // Scheduling: if a future timestamp is supplied, queue it for the scheduler.
+  if (scheduled_at) {
+    const when = new Date(String(scheduled_at));
+    if (isNaN(when.getTime())) return res.status(400).json({ error: 'invalid schedule time' });
+    if (when.getTime() <= Date.now() + 5000) return res.status(400).json({ error: 'schedule time must be in the future' });
+    const iso = when.toISOString().replace('T', ' ').replace('Z', '');
+    const camp = await db.one(
+      `INSERT INTO campaigns (company_id, name, template_id, segment, audience, status, scheduled_at)
+       VALUES ($1,$2,$3,$4,$5,'scheduled',$6) RETURNING *`,
+      [req.company.id, name, tmpl.id, seg.label, recipients.length, iso]);
+    return res.status(201).json({ campaign: Object.assign({}, camp, { template_name: tmpl.name }) });
+  }
+
+  // Immediate send.
+  const camp = await db.one(
+    `INSERT INTO campaigns (company_id, name, template_id, segment, audience, status)
+     VALUES ($1,$2,$3,$4,$5,'sending') RETURNING *`,
+    [req.company.id, name, tmpl.id, seg.label, recipients.length]);
+  const result = await deliverCampaign(req.company, camp, tmpl, recipients);
+  res.status(201).json({ campaign: Object.assign({}, result, { template_name: tmpl.name }) });
+});
+
+app.patch('/api/campaigns/:id', auth, requireModule('broadcast'), requireRole('owner', 'admin'), async (req, res) => {
+  const c = await db.one('SELECT * FROM campaigns WHERE id=$1 AND company_id=$2', [req.params.id, req.company.id]);
+  if (!c) return res.status(404).json({ error: 'campaign not found' });
+  const { status } = req.body || {};
+  if (status === 'cancelled') {
+    if (c.status !== 'scheduled') return res.status(400).json({ error: 'only scheduled campaigns can be cancelled' });
+    const up = await db.one(`UPDATE campaigns SET status='cancelled' WHERE id=$1 RETURNING *`, [c.id]);
+    return res.json({ campaign: up });
+  }
+  return res.status(400).json({ error: 'unsupported update' });
+});
+
+// Resolve a segment spec into a WHERE clause + human label.
+function resolveSegment(segment) {
+  const segType = segment && segment.type ? segment.type : 'all';
+  const segVal = segment && segment.value;
+  let where = 'company_id=$1'; const params = []; let label = 'All contacts';
+  if (segType === 'tag') { where += ' AND tags LIKE $2'; params.push(`%"${segVal}"%`); label = `Tag: ${segVal}`; }
+  else if (segType === 'stage') { where += ' AND stage=$2'; params.push(segVal); label = `Stage: ${segVal}`; }
+  return { where, params, label };
+}
+
+// Send a campaign's messages and record delivery counts. Reusable by the API
+// (immediate send) and the background scheduler (queued send).
+async function deliverCampaign(company, camp, tmpl, recipients) {
+  if (!recipients) {
+    // Re-resolve recipients from the stored label for scheduled runs.
+    let where = 'company_id=$1'; const params = [];
+    const seg = camp.segment || '';
+    if (seg.startsWith('Tag: ')) { where += ' AND tags LIKE $2'; params.push(`%"${seg.slice(5)}"%`); }
+    else if (seg.startsWith('Stage: ')) { where += ' AND stage=$2'; params.push(seg.slice(7)); }
+    recipients = (await db.query(`SELECT * FROM contacts WHERE ${where}`, [company.id, ...params])).rows;
+  }
+  const configured = wa.isConfigured(company);
+  let sent = 0, delivered = 0, failed = 0;
   for (const ct of recipients) {
-    let status = 'demo'; let waId = null;
+    let status = 'demo', waId = null;
     if (configured) {
-      const r = await wa.sendTemplate(req.company, ct.phone, tmpl.name);
+      const r = await wa.sendTemplate(company, ct.phone, tmpl.name);
       if (r.ok) { status = 'sent'; waId = r.wa_message_id || null; delivered++; sent++; }
       else { status = 'failed'; failed++; }
     } else { status = 'demo'; sent++; delivered++; }
     await db.query(
       `INSERT INTO messages (company_id, contact_id, direction, body, wa_message_id, status)
-       VALUES ($1,$2,'out',$3,$4,$5)`, [req.company.id, ct.id, personalize(tmpl.body, ct), waId, status]);
+       VALUES ($1,$2,'out',$3,$4,$5)`, [company.id, ct.id, personalize(tmpl.body, ct), waId, status]);
     await db.query(`UPDATE contacts SET last_direction='out', last_message_at=(now() AT TIME ZONE 'utc') WHERE id=$1`, [ct.id]);
   }
-  const camp = await db.one(
-    `INSERT INTO campaigns (company_id, name, template_id, segment, audience, sent, delivered, failed, status)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'sent') RETURNING *`,
-    [req.company.id, name, tmpl.id, label, recipients.length, sent, delivered, failed]);
-  res.status(201).json({ campaign: Object.assign({}, camp, { template_name: tmpl.name }) });
-});
+  const up = await db.one(
+    `UPDATE campaigns SET audience=$2, sent=$3, delivered=$4, failed=$5, status='sent' WHERE id=$1 RETURNING *`,
+    [camp.id, recipients.length, sent, delivered, failed]);
+  return up;
+}
+
+// Background scheduler — atomically claims one due campaign at a time so it is
+// safe to run in every app instance (only one claims each row).
+async function runScheduler() {
+  try {
+    for (;;) {
+      const claimed = await db.one(
+        `UPDATE campaigns SET status='sending'
+         WHERE id = (SELECT id FROM campaigns
+                     WHERE status='scheduled' AND scheduled_at <= (now() AT TIME ZONE 'utc')
+                     ORDER BY scheduled_at ASC LIMIT 1)
+         RETURNING *`);
+      if (!claimed) break;
+      const company = await db.one('SELECT * FROM companies WHERE id=$1', [claimed.company_id]);
+      const tmpl = await db.one('SELECT * FROM templates WHERE id=$1', [claimed.template_id]);
+      if (!company || company.status === 'suspended' || !tmpl) {
+        await db.query(`UPDATE campaigns SET status='failed' WHERE id=$1`, [claimed.id]);
+        continue;
+      }
+      await deliverCampaign(company, claimed, tmpl, null);
+      console.log(`[verbal] scheduled campaign #${claimed.id} sent`);
+    }
+  } catch (e) { console.error('[verbal] scheduler error:', e); }
+}
 
 // ===========================================================================
 // BOTS  (module: automation)
@@ -657,6 +824,53 @@ app.get('/api/stats', auth, async (req, res) => {
   for (const r of stageRows) pipeline[r.stage] = r.n;
   res.json({ contacts, unread, messages7d: msgs7, campaigns, activeUsers, botReplies, pipeline });
 });
+
+// ===========================================================================
+// ANALYTICS
+// ===========================================================================
+app.get('/api/analytics', auth, async (req, res) => {
+  const cid = req.company.id;
+  // Average first-response time: gap between a contact's first inbound and the
+  // first human agent reply after it.
+  const rt = await db.one(`
+    WITH firsts AS (
+      SELECT contact_id, MIN(created_at) AS first_in
+      FROM messages WHERE company_id=$1 AND direction='in' GROUP BY contact_id
+    ), replies AS (
+      SELECT m.contact_id, MIN(m.created_at) AS first_reply
+      FROM messages m JOIN firsts f ON f.contact_id=m.contact_id
+      WHERE m.company_id=$1 AND m.direction='out' AND m.sent_by_user_id IS NOT NULL AND m.created_at > f.first_in
+      GROUP BY m.contact_id
+    )
+    SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (r.first_reply::timestamp - f.first_in::timestamp))),0) AS avg_seconds,
+           COUNT(*)::int AS replied
+    FROM firsts f JOIN replies r ON r.contact_id=f.contact_id`, [cid]);
+
+  const opened = (await db.one(`SELECT COUNT(DISTINCT contact_id)::int AS n FROM messages WHERE company_id=$1 AND direction='in'`, [cid])).n;
+  const inbound = (await db.one(`SELECT COUNT(*)::int AS n FROM messages WHERE company_id=$1 AND direction='in' AND created_at >= (now() AT TIME ZONE 'utc') - interval '30 days'`, [cid])).n;
+  const outbound = (await db.one(`SELECT COUNT(*)::int AS n FROM messages WHERE company_id=$1 AND direction='out' AND created_at >= (now() AT TIME ZONE 'utc') - interval '30 days'`, [cid])).n;
+  const resolvedTotal = (await db.one(`SELECT COUNT(*)::int AS n FROM messages WHERE company_id=$1 AND direction='note' AND body LIKE 'Conversation resolved%'`, [cid])).n;
+
+  const agents = (await db.query(`
+    SELECT u.id, u.name, u.role,
+      (SELECT COUNT(*)::int FROM messages m WHERE m.company_id=$1 AND m.sent_by_user_id=u.id AND m.direction='out') AS sent,
+      (SELECT COUNT(*)::int FROM messages m WHERE m.company_id=$1 AND m.sent_by_user_id=u.id AND m.direction='note' AND m.body LIKE 'Conversation resolved%') AS resolved,
+      (SELECT COUNT(*)::int FROM contacts c WHERE c.company_id=$1 AND c.owner_user_id=u.id) AS assigned
+    FROM users u WHERE u.company_id=$1 AND u.active=TRUE ORDER BY sent DESC`, [cid])).rows;
+
+  const replied = rt ? rt.replied : 0;
+  res.json({
+    avgResponseSeconds: rt ? Math.round(Number(rt.avg_seconds)) : 0,
+    conversationsOpened: opened,
+    conversationsReplied: replied,
+    replyRate: opened ? Math.round((replied / opened) * 100) : 0,
+    inbound30d: inbound,
+    outbound30d: outbound,
+    resolvedTotal,
+    agents,
+  });
+});
+
 
 // ===========================================================================
 // SIMULATE INCOMING (testing tool)
@@ -917,11 +1131,16 @@ app.get(/^\/(?!api|webhook).*/, (req, res) => {
 // JSON 404 for unknown API routes.
 app.use('/api', (req, res) => res.status(404).json({ error: 'not found' }));
 
+app.runScheduler = runScheduler; // exposed for tests
+
 // ---------------------------------------------------------------------------
 if (require.main === module) {
   const PORT = parseInt(process.env.PORT || '3000', 10);
   ensureReady().catch((e) => console.error('[verbal] schema init error:', e));
   app.listen(PORT, '0.0.0.0', () => console.log(`[verbal] listening on :${PORT} (${NODE_ENV})`));
+  // Background scheduler for queued broadcasts. Atomic row-claiming makes it
+  // safe to run in every instance. Poll every 20s.
+  setInterval(() => { ensureReady().then(runScheduler).catch(() => {}); }, 20000).unref();
 }
 
 module.exports = app;

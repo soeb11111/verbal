@@ -313,6 +313,81 @@ async function main() {
     assert.ok(msgs.body.messages.some((m) => m.direction === 'out'), 'welcome bot replied');
   });
 
+  // ---- Password reset -----------------------------------------------------
+  await test('forgot/reset password flow works (demo delivery)', async () => {
+    const r = await api('POST', '/api/auth/forgot', { body: { email: 'alice@alpha.com' } });
+    assert.strictEqual(r.status, 200);
+    assert.ok(r.body.resetUrl, 'demo delivery should return a reset url');
+    const token = r.body.resetUrl.split('/reset/')[1];
+    // wrong token rejected
+    let bad = await api('POST', '/api/auth/reset', { body: { token: 'nope', password: 'newpass123' } });
+    assert.strictEqual(bad.status, 400);
+    // valid reset
+    const ok = await api('POST', '/api/auth/reset', { body: { token, password: 'newpass123' } });
+    assert.strictEqual(ok.status, 200);
+    // token cannot be reused
+    const reuse = await api('POST', '/api/auth/reset', { body: { token, password: 'again123' } });
+    assert.strictEqual(reuse.status, 400);
+    // login with new password
+    const li = await api('POST', '/api/auth/login', { body: { email: 'alice@alpha.com', password: 'newpass123' } });
+    assert.strictEqual(li.status, 200);
+    ownerAToken = li.body.token;
+  });
+
+  await test('login rate limiting blocks repeated failures with 429', async () => {
+    for (let i = 0; i < 5; i++) await api('POST', '/api/auth/login', { body: { email: 'rl@test.com', password: 'wrong' } });
+    const blocked = await api('POST', '/api/auth/login', { body: { email: 'rl@test.com', password: 'wrong' } });
+    assert.strictEqual(blocked.status, 429);
+  });
+
+  // ---- Scheduled broadcasts ----------------------------------------------
+  await test('scheduled broadcast queues and the scheduler sends it', async () => {
+    const t = await api('POST', '/api/templates', { token: ownerAToken, body: { name: 'sched_promo', body: 'Scheduled {name}' } });
+    const future = new Date(Date.now() + 3600 * 1000).toISOString();
+    const r = await api('POST', '/api/campaigns', { token: ownerAToken, body: { name: 'Later Blast', template_id: t.body.template.id, segment: { type: 'all' }, scheduled_at: future } });
+    assert.strictEqual(r.status, 201);
+    assert.strictEqual(r.body.campaign.status, 'scheduled');
+    const campId = r.body.campaign.id;
+    // Backdate and run the scheduler.
+    await db.query(`UPDATE campaigns SET scheduled_at=(now() AT TIME ZONE 'utc') - interval '1 minute' WHERE id=$1`, [campId]);
+    await app.runScheduler();
+    const list = await api('GET', '/api/campaigns', { token: ownerAToken });
+    const camp = list.body.campaigns.find((c) => c.id === campId);
+    assert.strictEqual(camp.status, 'sent');
+    assert.ok(camp.sent >= 1);
+  });
+
+  await test('scheduled broadcast can be cancelled and is not sent', async () => {
+    const t = await api('POST', '/api/templates', { token: ownerAToken, body: { name: 'cancel_promo', body: 'Hi {name}' } });
+    const future = new Date(Date.now() + 3600 * 1000).toISOString();
+    const r = await api('POST', '/api/campaigns', { token: ownerAToken, body: { name: 'Cancel Me', template_id: t.body.template.id, segment: { type: 'all' }, scheduled_at: future } });
+    const campId = r.body.campaign.id;
+    const cx = await api('PATCH', '/api/campaigns/' + campId, { token: ownerAToken, body: { status: 'cancelled' } });
+    assert.strictEqual(cx.body.campaign.status, 'cancelled');
+    await db.query(`UPDATE campaigns SET scheduled_at=(now() AT TIME ZONE 'utc') - interval '1 minute' WHERE id=$1`, [campId]);
+    await app.runScheduler();
+    const list = await api('GET', '/api/campaigns', { token: ownerAToken });
+    const camp = list.body.campaigns.find((c) => c.id === campId);
+    assert.strictEqual(camp.status, 'cancelled');
+  });
+
+  await test('past schedule time is rejected', async () => {
+    const t = await api('POST', '/api/templates', { token: ownerAToken, body: { name: 'past_promo', body: 'x' } });
+    const past = new Date(Date.now() - 1000).toISOString();
+    const r = await api('POST', '/api/campaigns', { token: ownerAToken, body: { name: 'Past', template_id: t.body.template.id, segment: { type: 'all' }, scheduled_at: past } });
+    assert.strictEqual(r.status, 400);
+  });
+
+  // ---- Analytics ----------------------------------------------------------
+  await test('analytics returns response time, reply rate and agent performance', async () => {
+    const r = await api('GET', '/api/analytics', { token: ownerAToken });
+    assert.strictEqual(r.status, 200);
+    assert.ok('avgResponseSeconds' in r.body);
+    assert.ok('replyRate' in r.body);
+    assert.ok(Array.isArray(r.body.agents) && r.body.agents.length >= 1);
+    assert.ok(r.body.conversationsOpened >= 1);
+  });
+
   // ---- Wrap up ------------------------------------------------------------
   server.close();
   console.log(`\n${passed} passed, ${failed} failed`);
