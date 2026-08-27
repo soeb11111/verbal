@@ -1,0 +1,30 @@
+[
+  {
+    "content": "Phase 1: Backend foundation (package.json, db.js, whatsapp.js)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: server.js full API",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: Supervisor (postgres + node 8001 + web 3000)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 1: test.js PGlite API suite green (24 passing)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: public/index.html full vanilla UI (all 10 modules)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: uitest.js jsdom UI suite green (6 passing)",
+    "status": "completed"
+  },
+  {
+    "content": "Phase 2: testing_agent_v3 end-to-end validation (100% pass)",
+    "status": "completed"
+  }
+]
