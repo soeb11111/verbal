@@ -1,0 +1,1036 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Verbal — WhatsApp CRM</title>
+<style>
+:root{
+  --brand:#0f766e; --brand-dark:#115e59; --brand-tint:#e6f4f1;
+  --wa:#25d366; --wa-bubble:#e7f8ef; --line:#eceef0;
+  --text:#111827; --muted:#6b7280;
+  --bg:#ffffff; --bg-soft:#f9fafb; --amber:#b45309; --amber-tint:#fef3c7;
+  --red:#b91c1c; --red-tint:#fee2e2; --grey-tint:#f3f4f6;
+  --radius:10px; --btn-radius:7px;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{font-family:system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  font-size:14px;color:var(--text);background:var(--bg);-webkit-font-smoothing:antialiased}
+a{color:var(--brand);text-decoration:none}
+button{font-family:inherit;font-size:14px;cursor:pointer}
+input,select,textarea{font-family:inherit;font-size:14px;color:var(--text)}
+.hidden{display:none !important}
+
+/* Buttons */
+.btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border-radius:var(--btn-radius);
+  border:1px solid var(--line);background:#fff;color:var(--text);font-weight:600;white-space:nowrap}
+.btn:hover{background:var(--bg-soft)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+.btn.primary:hover{background:var(--brand-dark);border-color:var(--brand-dark)}
+.btn.danger{color:var(--red);border-color:#f1d3d3}
+.btn.danger:hover{background:var(--red-tint)}
+.btn.sm{height:30px;padding:0 10px;font-size:13px}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+
+/* Chips */
+.chip{display:inline-flex;align-items:center;gap:4px;padding:2px 9px;border-radius:999px;font-size:12px;font-weight:600;background:var(--grey-tint);color:var(--muted)}
+.chip.green{background:var(--brand-tint);color:var(--brand-dark)}
+.chip.red{background:var(--red-tint);color:var(--red)}
+.chip.amber{background:var(--amber-tint);color:var(--amber)}
+.chip.wa{background:var(--wa-bubble);color:#0b7a3b}
+
+/* Inputs */
+.field{display:block;margin-bottom:14px}
+.field label{display:block;font-size:12px;color:var(--muted);margin-bottom:5px;font-weight:600}
+.input,.select,textarea.input{width:100%;height:38px;padding:0 11px;border:1px solid var(--line);border-radius:var(--btn-radius);background:#fff;outline:none}
+textarea.input{height:auto;min-height:80px;padding:9px 11px;resize:vertical}
+.input:focus,.select:focus,textarea.input:focus{border-color:var(--brand)}
+
+/* Cards */
+.card{background:#fff;border:1px solid var(--line);border-radius:var(--radius)}
+.pad{padding:16px}
+
+/* Tables */
+table.tbl{width:100%;border-collapse:collapse;background:#fff}
+table.tbl th{background:var(--bg-soft);text-align:left;font-size:12px;color:var(--muted);font-weight:600;padding:10px 14px;border-bottom:1px solid var(--line)}
+table.tbl td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+table.tbl tr:hover td{background:var(--bg-soft)}
+
+/* Layout */
+#app{display:flex;height:100vh;overflow:hidden}
+/* Icon rail */
+.rail{width:56px;background:#fff;border-right:1px solid var(--line);display:flex;flex-direction:column;
+  transition:width .16s ease;overflow:hidden;flex-shrink:0;z-index:30}
+.rail:hover{width:224px;box-shadow:2px 0 14px rgba(0,0,0,.05)}
+.rail .ws{display:flex;align-items:center;gap:10px;height:56px;padding:0 16px;border-bottom:1px solid var(--line);font-weight:600}
+.rail .ws .emoji{font-size:20px;flex-shrink:0}
+.rail .ws .nm{white-space:nowrap;opacity:0;transition:opacity .16s}
+.rail:hover .ws .nm{opacity:1}
+.rail .nav{flex:1;overflow-y:auto;padding:8px 0}
+.rail .grp{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:#9aa1ab;padding:12px 18px 4px;white-space:nowrap;opacity:0;transition:opacity .16s}
+.rail:hover .grp{opacity:1}
+.navitem{display:flex;align-items:center;gap:14px;height:40px;padding:0 18px;color:var(--muted);white-space:nowrap;cursor:pointer;border-left:3px solid transparent}
+.navitem .ic{width:20px;text-align:center;flex-shrink:0;font-size:16px}
+.navitem .lbl{opacity:0;transition:opacity .16s}
+.rail:hover .navitem .lbl{opacity:1}
+.navitem:hover{background:var(--bg-soft);color:var(--text)}
+.navitem.active{background:var(--brand-tint);color:var(--brand-dark);border-left-color:var(--brand);font-weight:600}
+.rail .me{border-top:1px solid var(--line);padding:10px 14px;display:flex;align-items:center;gap:10px;white-space:nowrap}
+.rail .me .txt{opacity:0;transition:opacity .16s;overflow:hidden}
+.rail:hover .me .txt{opacity:1}
+
+/* Main */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.topbar{height:56px;border-bottom:1px solid var(--line);display:flex;align-items:center;justify-content:space-between;padding:0 20px;flex-shrink:0;background:#fff}
+.topbar .title{font-size:16px;font-weight:600}
+.topbar .sub{font-size:12px;color:var(--muted)}
+.wa-pill{display:inline-flex;align-items:center;gap:7px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line);background:#fff}
+.wa-pill .dot{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.wa-pill.demo{background:var(--amber-tint);color:var(--amber);border-color:#f6e3b0}
+.wa-pill.demo .dot{background:var(--amber)}
+.wa-pill.live{background:var(--wa-bubble);color:#0b7a3b;border-color:#bfe9cf}
+.wa-pill.live .dot{background:var(--wa)}
+
+.impersonate-banner{background:#0b1324;color:#fff;padding:8px 20px;display:flex;align-items:center;justify-content:space-between;font-size:13px}
+.impersonate-banner .btn{height:30px}
+
+.content{flex:1;overflow-y:auto;padding:22px 24px}
+.page-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
+.page-head h1{font-size:18px;margin:0;font-weight:600}
+.filter-row{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap}
+
+/* Avatar */
+.avatar{width:38px;height:38px;border-radius:50%;background:var(--brand-tint);color:var(--brand-dark);display:inline-flex;align-items:center;justify-content:center;font-weight:600;flex-shrink:0;font-size:14px}
+.avatar.sm{width:30px;height:30px;font-size:12px}
+.avatar.lg{width:48px;height:48px;font-size:17px}
+
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:14px;margin-bottom:20px}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:16px}
+.kpi .k{font-size:12px;color:var(--muted);font-weight:600}
+.kpi .v{font-size:26px;font-weight:600;margin-top:6px}
+
+/* Empty */
+.empty{text-align:center;color:var(--muted);padding:50px 20px}
+.empty a{font-weight:600}
+
+/* Banner */
+.banner{background:var(--amber-tint);color:var(--amber);border:1px solid #f6e3b0;border-radius:var(--radius);padding:12px 16px;margin-bottom:18px;font-size:13px;display:flex;gap:10px;align-items:center}
+
+/* Pipeline chart */
+.pipeline{display:flex;align-items:flex-end;gap:18px;height:180px;padding:10px 4px 0}
+.pipeline .col{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;height:100%}
+.pipeline .bar{width:100%;max-width:66px;background:var(--brand);border-radius:6px 6px 0 0;min-height:4px;transition:height .3s}
+.pipeline .cnt{font-weight:600;margin-bottom:6px}
+.pipeline .lab{font-size:11px;color:var(--muted);margin-top:8px;text-align:center}
+
+/* Auth */
+.auth-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#f4faf8,#ffffff);padding:20px}
+.auth-card{width:100%;max-width:400px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:30px}
+.auth-logo{display:flex;align-items:center;gap:9px;font-size:22px;font-weight:600;margin-bottom:4px}
+.auth-logo .tick{color:var(--wa)}
+.auth-sub{color:var(--muted);font-size:13px;margin-bottom:20px}
+.auth-tabs{display:flex;gap:6px;margin-bottom:18px;background:var(--grey-tint);padding:4px;border-radius:9px}
+.auth-tabs button{flex:1;height:34px;border:none;background:transparent;border-radius:7px;color:var(--muted);font-weight:600}
+.auth-tabs button.active{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+.firstrun-note{background:var(--brand-tint);color:var(--brand-dark);padding:9px 12px;border-radius:8px;font-size:12px;margin-bottom:16px}
+.err{color:var(--red);font-size:13px;margin-bottom:12px;min-height:16px}
+
+/* Chats layout */
+.chats{display:flex;height:100%;min-height:0}
+.col-filters{width:236px;border-right:1px solid var(--line);flex-shrink:0;overflow-y:auto;padding:10px}
+.col-list{width:340px;border-right:1px solid var(--line);flex-shrink:0;display:flex;flex-direction:column;min-height:0}
+.col-convo{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg-soft)}
+.col-details{width:300px;border-left:1px solid var(--line);flex-shrink:0;overflow-y:auto;background:#fff}
+.fitem{display:flex;align-items:center;justify-content:space-between;padding:8px 11px;border-radius:8px;cursor:pointer;color:var(--text)}
+.fitem:hover{background:var(--bg-soft)}
+.fitem.active{background:var(--brand-tint);color:var(--brand-dark);font-weight:600}
+.fitem .badge{background:#e5e7eb;color:var(--muted);border-radius:999px;font-size:11px;padding:1px 8px;font-weight:600}
+.fitem.active .badge{background:var(--brand);color:#fff}
+.fsep{height:1px;background:var(--line);margin:9px 4px}
+.list-head{padding:12px 14px;border-bottom:1px solid var(--line)}
+.list-head .cnt{font-size:12px;color:var(--muted)}
+.search{width:100%;height:36px;padding:0 11px;border:1px solid var(--line);border-radius:7px;margin-top:8px}
+.list-scroll{overflow-y:auto;flex:1}
+.chatrow{display:flex;gap:11px;padding:11px 14px;border-bottom:1px solid var(--line);cursor:pointer}
+.chatrow:hover{background:var(--bg-soft)}
+.chatrow.active{background:var(--brand-tint)}
+.chatrow .body{flex:1;min-width:0}
+.chatrow .top{display:flex;justify-content:space-between;gap:8px}
+.chatrow .nm{font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chatrow .tm{font-size:11px;color:var(--muted);flex-shrink:0}
+.chatrow .ph{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chatrow .tags{display:flex;gap:4px;margin-top:4px;flex-wrap:wrap}
+.chatrow .unread{background:var(--wa);color:#fff;border-radius:999px;font-size:11px;font-weight:600;min-width:20px;height:20px;display:inline-flex;align-items:center;justify-content:center;padding:0 5px}
+.convo-head{height:60px;background:#fff;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0}
+.convo-head .meta{flex:1;min-width:0}
+.convo-head .nm{font-weight:600}
+.convo-head .ph{font-size:12px;color:var(--muted)}
+.msgs{flex:1;overflow-y:auto;padding:18px 16%;display:flex;flex-direction:column;gap:8px}
+.bubble{max-width:70%;padding:8px 12px;border-radius:10px;font-size:13.5px;line-height:1.4;position:relative;word-wrap:break-word;white-space:pre-wrap}
+.bubble.in{align-self:flex-start;background:#fff;border:1px solid var(--line);border-bottom-left-radius:3px}
+.bubble.out{align-self:flex-end;background:var(--wa-bubble);border-bottom-right-radius:3px}
+.bubble .meta{font-size:10.5px;color:var(--muted);margin-top:4px;display:flex;gap:6px;justify-content:flex-end;align-items:center}
+.bubble.in .meta{justify-content:flex-start}
+.bubble .sender{font-size:11px;font-weight:600;color:var(--brand-dark);margin-bottom:2px}
+.note{align-self:center;max-width:80%;background:#fffbeb;border:1px dashed #f2d98d;color:var(--amber);border-radius:8px;padding:6px 12px;font-size:12px;text-align:center}
+.tick{color:var(--muted)}
+.tick.read{color:#34b7f1}
+.composer{border-top:1px solid var(--line);background:#fff;padding:10px 14px;flex-shrink:0;position:relative}
+.composer .row{display:flex;gap:8px;align-items:flex-end}
+.composer textarea{flex:1;border:1px solid var(--line);border-radius:8px;padding:9px 11px;resize:none;max-height:120px;min-height:40px;outline:none}
+.qr-pop{position:absolute;bottom:64px;left:14px;right:14px;max-height:220px;overflow-y:auto;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.12);z-index:20}
+.qr-item{padding:10px 13px;border-bottom:1px solid var(--line);cursor:pointer}
+.qr-item:hover,.qr-item.active{background:var(--brand-tint)}
+.qr-item .t{font-weight:600;font-size:13px}
+.qr-item .b{font-size:12px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.detail-tabs{display:flex;border-bottom:1px solid var(--line)}
+.detail-tabs button{flex:1;height:44px;border:none;background:#fff;color:var(--muted);font-weight:600;border-bottom:2px solid transparent}
+.detail-tabs button.active{color:var(--brand-dark);border-bottom-color:var(--brand)}
+.detail-body{padding:16px}
+.drow{margin-bottom:14px}
+.drow .l{font-size:11px;color:var(--muted);font-weight:600;margin-bottom:3px}
+.tag-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.tag-chips .x{cursor:pointer;opacity:.6}
+.tag-chips .x:hover{opacity:1}
+
+/* Modal */
+.modal-back{position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:center;justify-content:center;z-index:100;padding:20px}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:480px;max-height:90vh;overflow-y:auto}
+.modal.wide{max-width:620px}
+.modal-head{padding:18px 20px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center}
+.modal-head h3{margin:0;font-size:16px}
+.modal-body{padding:20px}
+.modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:10px}
+.x-close{border:none;background:none;font-size:20px;color:var(--muted);cursor:pointer}
+
+/* Toast */
+#toasts{position:fixed;bottom:20px;right:20px;z-index:200;display:flex;flex-direction:column;gap:10px}
+.toast{background:#0b1324;color:#fff;padding:11px 16px;border-radius:9px;font-size:13px;box-shadow:0 8px 24px rgba(0,0,0,.2);max-width:340px}
+.toast.err{background:var(--red)}
+.toast.ok{background:var(--brand-dark)}
+
+/* misc */
+.creds{background:var(--bg-soft);border:1px solid var(--line);border-radius:9px;padding:14px;font-size:13px}
+.creds .r{display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px dashed var(--line)}
+.creds .r:last-child{border-bottom:none}
+.creds code{background:#fff;border:1px solid var(--line);padding:2px 8px;border-radius:6px;font-size:13px}
+.usage-bar{height:8px;background:var(--grey-tint);border-radius:999px;overflow:hidden;margin-top:6px}
+.usage-bar span{display:block;height:100%;background:var(--brand)}
+.usage-bar.full span{background:var(--red)}
+.toggle{position:relative;width:44px;height:24px;border-radius:999px;background:#d1d5db;cursor:pointer;transition:background .15s;flex-shrink:0}
+.toggle.on{background:var(--brand)}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:left .15s}
+.toggle.on::after{left:23px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.spinner{width:26px;height:26px;border:3px solid var(--line);border-top-color:var(--brand);border-radius:50%;animation:spin .7s linear infinite;margin:40px auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+.mut{color:var(--muted)}
+.sr-flex{display:flex;align-items:center;gap:10px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<div id="modal-root"></div>
+<div id="toasts"></div>
+
+<script>
+"use strict";
+/* ============================ Verbal SPA ============================ */
+const LS_TOKEN='verbal_token', LS_ADMIN='verbal_admin_token';
+const state={ token:localStorage.getItem(LS_TOKEN)||'', adminToken:localStorage.getItem(LS_ADMIN)||'',
+  me:null, view:'dashboard', chat:{view:'open', q:'', contactId:null, contacts:[], messages:[], counts:{}, tab:'details', users:[]} };
+
+const STAGES=['New Lead','Qualified','Negotiation','Won','Cold'];
+const $=(s,r=document)=>r.querySelector(s);
+const $$=(s,r=document)=>Array.from(r.querySelectorAll(s));
+function esc(s){return String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+function initials(n){return String(n||'?').trim().split(/\s+/).slice(0,2).map(w=>w[0]||'').join('').toUpperCase()||'?';}
+function firstName(n){return String(n||'there').trim().split(/\s+/)[0];}
+function fmtTime(ts){ if(!ts)return''; const d=new Date(ts.replace(' ','T')+'Z'); if(isNaN(d))return'';
+  const now=new Date(); const sameDay=d.toDateString()===now.toDateString();
+  if(sameDay)return d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+  return d.toLocaleDateString([], {day:'2-digit',month:'short'}); }
+function fmtDate(ts){ if(!ts)return'—'; const d=new Date(ts.replace(' ','T')+'Z'); if(isNaN(d))return'—';
+  return d.toLocaleDateString([], {day:'2-digit',month:'short',year:'numeric'}); }
+function fmtDateTime(ts){ if(!ts)return'—'; const d=new Date(ts.replace(' ','T')+'Z'); if(isNaN(d))return'—';
+  return d.toLocaleDateString([], {day:'2-digit',month:'short'})+' '+d.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}); }
+
+function toast(msg,type){const t=document.createElement('div');t.className='toast '+(type||'');t.textContent=msg;
+  $('#toasts').appendChild(t);setTimeout(()=>{t.style.opacity='0';t.style.transition='opacity .3s';setTimeout(()=>t.remove(),300);},3200);}
+
+async function api(method,path,body){
+  const headers={};
+  if(body!==undefined)headers['Content-Type']='application/json';
+  if(state.token)headers['Authorization']='Bearer '+state.token;
+  const res=await fetch(path,{method,headers,body:body!==undefined?JSON.stringify(body):undefined});
+  let data=null; const txt=await res.text(); try{data=txt?JSON.parse(txt):null;}catch(_){data={_raw:txt};}
+  if(res.status===401){ if(state.token){logout();} const e=new Error((data&&data.error)||'Session expired'); e.status=401; throw e; }
+  if(!res.ok){ const e=new Error((data&&data.error)||('Error '+res.status)); e.status=res.status; e.data=data; throw e; }
+  return data;
+}
+// unauthenticated helper
+async function apiPublic(method,path,body){
+  const res=await fetch(path,{method,headers:body!==undefined?{'Content-Type':'application/json'}:{},body:body!==undefined?JSON.stringify(body):undefined});
+  let data=null;const txt=await res.text();try{data=txt?JSON.parse(txt):null;}catch(_){}
+  if(!res.ok)throw new Error((data&&data.error)||('Error '+res.status));
+  return data;
+}
+
+function setToken(t){state.token=t;localStorage.setItem(LS_TOKEN,t);}
+function logout(){localStorage.removeItem(LS_TOKEN);localStorage.removeItem(LS_ADMIN);state.token='';state.adminToken='';state.me=null;location.hash='';renderAuth();}
+
+/* ============================ Boot ============================ */
+window.addEventListener('DOMContentLoaded',boot);
+window.addEventListener('hashchange',()=>{
+  if(location.hash.startsWith('#/reset/')){ renderReset(decodeURIComponent(location.hash.slice(8))); return; }
+  if(state.me){ const v=(location.hash||'#/dashboard').slice(2)||'dashboard'; state.view=v; renderApp(); }
+});
+window.addEventListener('unhandledrejection',e=>{ console.error('unhandledrejection',e.reason); });
+
+async function boot(){
+  if(location.hash.startsWith('#/reset/')){ renderReset(decodeURIComponent(location.hash.slice(8))); return; }
+  if(!state.token){ renderAuth(); return; }
+  try{ state.me=await api('GET','/api/me'); const v=(location.hash||'#/dashboard').slice(2)||'dashboard'; state.view=v; renderApp(); }
+  catch(e){ renderAuth(); }
+}
+
+function renderReset(token){
+  $('#root').innerHTML=`
+  <div class="auth-wrap"><div class="auth-card">
+    <div class="auth-logo"><span class="tick">✔✔</span> Verbal</div>
+    <div class="auth-sub">Choose a new password</div>
+    <div class="err" id="reset-err"></div>
+    <form id="reset-form">
+      <div class="field"><label>New password</label><input class="input" name="password" type="password" minlength="6" required></div>
+      <div class="field"><label>Confirm password</label><input class="input" name="confirm" type="password" minlength="6" required></div>
+      <button class="btn primary" style="width:100%" type="submit">Reset password</button>
+    </form>
+  </div></div>`;
+  $('#reset-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');
+    const pw=f.querySelector('[name="password"]').value, cf=f.querySelector('[name="confirm"]').value;
+    if(pw!==cf){$('#reset-err').textContent='Passwords do not match';return;}
+    btn.disabled=true;
+    try{ await apiPublic('POST','/api/auth/reset',{token,password:pw}); toast('Password reset — please sign in','ok'); location.hash=''; renderAuth(); }
+    catch(err){$('#reset-err').textContent=err.message;btn.disabled=false;}};
+}
+
+/* ============================ Auth screen ============================ */
+async function renderAuth(){
+  let cfg={firstRun:false,registrationOpen:false};
+  try{ cfg=await apiPublic('GET','/api/auth/config'); }catch(_){}
+  const tab = cfg.firstRun?'signup':'login';
+  const root=$('#root');
+  root.innerHTML=`
+  <div class="auth-wrap"><div class="auth-card">
+    <div class="auth-logo"><span class="tick">✔✔</span> Verbal</div>
+    <div class="auth-sub">WhatsApp Business CRM</div>
+    ${cfg.firstRun?'<div class="firstrun-note">First run — create your platform owner account.</div>':''}
+    <div class="auth-tabs">
+      <button data-tab="login" class="${tab==='login'?'active':''}">Sign in</button>
+      <button data-tab="signup" class="${tab==='signup'?'active':''}">Sign up</button>
+    </div>
+    <div class="err" id="auth-err"></div>
+    <form id="login-form" class="${tab==='login'?'':'hidden'}">
+      <div class="field"><label>Email</label><input class="input" name="email" type="email" required></div>
+      <div class="field"><label>Password</label><input class="input" name="password" type="password" required></div>
+      <button class="btn primary" style="width:100%" type="submit">Sign in</button>
+      <div style="text-align:center;margin-top:12px"><a href="#" id="forgot-link">Forgot password?</a></div>
+    </form>
+    <form id="forgot-form" class="hidden">
+      <p class="mut" style="margin-top:0;font-size:13px">Enter your email and we'll send you a link to reset your password.</p>
+      <div class="field"><label>Email</label><input class="input" name="email" type="email" required></div>
+      <button class="btn primary" style="width:100%" type="submit">Send reset link</button>
+      <div style="text-align:center;margin-top:12px"><a href="#" id="back-login">Back to sign in</a></div>
+      <div id="forgot-msg" style="margin-top:14px"></div>
+    </form>
+    <form id="signup-form" class="${tab==='signup'?'':'hidden'}">
+      <div class="field"><label>Workspace / company name</label><input class="input" name="companyName" required></div>
+      <div class="field"><label>Your name</label><input class="input" name="name" required></div>
+      <div class="field"><label>Email</label><input class="input" name="email" type="email" required></div>
+      <div class="field"><label>Password</label><input class="input" name="password" type="password" minlength="6" required></div>
+      <button class="btn primary" style="width:100%" type="submit">Create account</button>
+      ${(!cfg.firstRun && !cfg.registrationOpen)?'<div class="mut" style="font-size:12px;margin-top:12px;text-align:center">Public sign-up is closed. Contact your administrator.</div>':''}
+    </form>
+  </div></div>`;
+  $$('.auth-tabs button').forEach(b=>b.onclick=()=>{
+    $$('.auth-tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');
+    $('#login-form').classList.toggle('hidden',b.dataset.tab!=='login');
+    $('#signup-form').classList.toggle('hidden',b.dataset.tab!=='signup');
+    $('#forgot-form').classList.add('hidden');
+    $('#auth-err').textContent='';
+  });
+  $('#forgot-link').onclick=(e)=>{e.preventDefault();$('#login-form').classList.add('hidden');$('#forgot-form').classList.remove('hidden');$('#auth-err').textContent='';};
+  $('#back-login').onclick=(e)=>{e.preventDefault();$('#forgot-form').classList.add('hidden');$('#login-form').classList.remove('hidden');$('#forgot-msg').innerHTML='';};
+  $('#forgot-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');const email=f.querySelector('[name="email"]').value.trim();btn.disabled=true;
+    try{const d=await apiPublic('POST','/api/auth/forgot',{email});
+      let html='<div class="firstrun-note">'+esc(d.message||'If an account exists, a reset link has been sent.')+'</div>';
+      if(d.demo&&d.resetUrl){html+='<div class="mut" style="font-size:12px;margin-top:8px">Demo mode (no email configured): <a href="'+esc(d.resetUrl)+'">open your reset link</a></div>';}
+      $('#forgot-msg').innerHTML=html;btn.disabled=false;
+    }catch(err){$('#forgot-msg').innerHTML='<div class="err">'+esc(err.message)+'</div>';btn.disabled=false;}};
+  $('#login-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');const val=n=>f.querySelector('[name="'+n+'"]').value;btn.disabled=true;
+    try{const d=await apiPublic('POST','/api/auth/login',{email:val('email').trim(),password:val('password')});setToken(d.token);state.me=await api('GET','/api/me');location.hash='#/dashboard';state.view='dashboard';renderApp();}
+    catch(err){$('#auth-err').textContent=err.message;btn.disabled=false;}};
+  $('#signup-form').onsubmit=async(e)=>{e.preventDefault();const f=e.target;const btn=f.querySelector('button');const val=n=>f.querySelector('[name="'+n+'"]').value;btn.disabled=true;
+    try{const d=await apiPublic('POST','/api/auth/register',{companyName:val('companyName').trim(),name:val('name').trim(),email:val('email').trim(),password:val('password')});setToken(d.token);state.me=await api('GET','/api/me');location.hash='#/dashboard';state.view='dashboard';renderApp();}
+    catch(err){$('#auth-err').textContent=err.message;btn.disabled=false;}};
+}
+
+/* ============================ App shell ============================ */
+const NAV=[
+  {grp:'Workspace',items:[
+    {v:'dashboard',ic:'🏠',lbl:'Home'},
+    {v:'chats',ic:'💬',lbl:'Chats',mod:'inbox'},
+    {v:'customers',ic:'👥',lbl:'Customers',mod:'contacts'},
+  ]},
+  {grp:'Engage',items:[
+    {v:'broadcast',ic:'📣',lbl:'Broadcast',mod:'broadcast'},
+    {v:'templates',ic:'📄',lbl:'Templates',mod:'templates'},
+    {v:'bots',ic:'🤖',lbl:'Bot studio',mod:'automation'},
+  ]},
+  {grp:'Manage',items:[
+    {v:'analytics',ic:'📊',lbl:'Analytics'},
+    {v:'team',ic:'🧑‍🤝‍🧑',lbl:'Team'},
+    {v:'settings',ic:'⚙️',lbl:'Settings'},
+  ]},
+];
+const NAV_PLATFORM={grp:'Platform',items:[
+  {v:'clients',ic:'🏢',lbl:'Clients'},
+  {v:'platform-settings',ic:'🛠️',lbl:'Platform settings'},
+]};
+
+const TITLES={dashboard:['Home','Overview of your workspace'],chats:['Chats','Your WhatsApp inbox'],
+  customers:['Customers','Your contact database'],broadcast:['Broadcast','Send templates to segments'],
+  templates:['Templates','WhatsApp message templates'],bots:['Bot studio','Automated replies'],
+  analytics:['Analytics','Team performance & response times'],
+  team:['Team','Manage your team members'],settings:['Settings','Workspace configuration'],
+  clients:['Clients','All client workspaces'],'platform-settings':['Platform settings','Platform configuration']};
+
+function moduleAllowed(mod){ if(!mod)return true; return (state.me.modules||[]).includes(mod); }
+
+function renderApp(){
+  const me=state.me; const c=me.company; const demo=!c.wa_connected;
+  const groups=NAV.map(g=>({grp:g.grp,items:g.items.filter(it=>moduleAllowed(it.mod))})).filter(g=>g.items.length);
+  if(me.isSuperAdmin)groups.push(NAV_PLATFORM);
+  // guard: view must be allowed
+  const flat=groups.flatMap(g=>g.items.map(i=>i.v));
+  if(!flat.includes(state.view))state.view=flat[0]||'dashboard';
+  const [title,sub]=TITLES[state.view]||[state.view,''];
+
+  $('#root').innerHTML=`
+  <div id="app">
+    <aside class="rail">
+      <div class="ws"><span class="emoji">${esc(c.logo_emoji||'💬')}</span><span class="nm">${esc(c.name)}</span></div>
+      <nav class="nav">
+        ${groups.map(g=>`<div class="grp">${g.grp}</div>`+g.items.map(it=>`
+          <div class="navitem ${state.view===it.v?'active':''}" data-v="${it.v}"><span class="ic">${it.ic}</span><span class="lbl">${it.lbl}</span></div>`).join('')).join('')}
+      </nav>
+      <div class="me"><div class="avatar sm">${initials(me.user.name)}</div>
+        <div class="txt"><div style="font-weight:600;font-size:13px">${esc(me.user.name)}</div>
+        <div class="mut" style="font-size:11px">${esc(me.user.role)}</div></div>
+        <button class="btn sm" style="margin-left:auto" id="logout-btn" title="Sign out">⎋</button></div>
+    </aside>
+    <div class="main">
+      ${state.adminToken?`<div class="impersonate-banner"><span>👁️ Viewing <b>${esc(c.name)}</b> as support. Client data is live.</span><button class="btn sm" id="stop-imp">Switch back to platform</button></div>`:''}
+      <div class="topbar">
+        <div><div class="title">${esc(title)}</div><div class="sub">${esc(sub)}</div></div>
+        <div class="wa-pill ${demo?'demo':'live'}"><span class="dot"></span>${demo?'Demo mode':'WhatsApp connected'}</div>
+      </div>
+      <div class="content" id="content"></div>
+    </div>
+  </div>`;
+  $$('.navitem').forEach(n=>n.onclick=()=>{location.hash='#/'+n.dataset.v;});
+  $('#logout-btn').onclick=logout;
+  const si=$('#stop-imp'); if(si)si.onclick=stopImpersonate;
+  renderView();
+}
+
+function stopImpersonate(){ setToken(state.adminToken); localStorage.removeItem(LS_ADMIN); state.adminToken='';
+  api('GET','/api/me').then(m=>{state.me=m;location.hash='#/clients';state.view='clients';renderApp();toast('Back to platform owner','ok');}); }
+
+function renderView(){
+  const el=$('#content'); el.innerHTML='<div class="spinner"></div>';
+  const map={dashboard:viewDashboard,chats:viewChats,customers:viewCustomers,broadcast:viewBroadcast,
+    templates:viewTemplates,bots:viewBots,analytics:viewAnalytics,team:viewTeam,settings:viewSettings,clients:viewClients,'platform-settings':viewPlatformSettings};
+  (map[state.view]||viewDashboard)(el);
+}
+
+/* ============================ Dashboard ============================ */
+async function viewDashboard(el){
+  try{
+    const s=await api('GET','/api/stats'); const demo=!state.me.company.wa_connected;
+    const maxP=Math.max(1,...STAGES.map(k=>s.pipeline[k]||0));
+    el.innerHTML=`
+    ${demo?`<div class="banner">⚡ <div><b>Demo mode.</b> Messages are stored but not sent to WhatsApp. Connect your Meta number in <a href="#/settings">Settings</a> to go live.</div></div>`:''}
+    <div class="kpis">
+      ${kpi('Contacts',s.contacts)}${kpi('Unread chats',s.unread)}${kpi('Messages (7d)',s.messages7d)}
+      ${kpi('Campaigns run',s.campaigns)}${kpi('Active users',s.activeUsers)}${kpi('Bot replies',s.botReplies)}
+    </div>
+    <div class="card pad" style="margin-bottom:20px">
+      <div style="font-weight:600;margin-bottom:8px">Lead pipeline</div>
+      <div class="pipeline">
+        ${STAGES.map(k=>{const v=s.pipeline[k]||0;const h=Math.round((v/maxP)*130)+4;
+          return `<div class="col"><div class="cnt">${v}</div><div class="bar" style="height:${h}px"></div><div class="lab">${k}</div></div>`;}).join('')}
+      </div>
+    </div>
+    <div class="card pad">
+      <div style="font-weight:600;margin-bottom:12px">Quick actions</div>
+      <div class="sr-flex" style="flex-wrap:wrap">
+        <button class="btn" data-act="contact">➕ Add a contact</button>
+        ${moduleAllowed('broadcast')?'<button class="btn" data-act="broadcast">📣 Launch a broadcast</button>':''}
+        <button class="btn" data-act="team">🧑‍🤝‍🧑 Invite a teammate</button>
+        <button class="btn" data-act="wa">🔗 Connect WhatsApp</button>
+      </div>
+    </div>`;
+    $$('[data-act]').forEach(b=>b.onclick=()=>{const a=b.dataset.act;
+      if(a==='contact'){location.hash='#/customers';setTimeout(()=>openContactModal(),120);}
+      else if(a==='broadcast')location.hash='#/broadcast';
+      else if(a==='team')location.hash='#/team';
+      else location.hash='#/settings';});
+  }catch(e){el.innerHTML=errBox(e);}
+}
+function kpi(k,v){return `<div class="kpi"><div class="k">${k}</div><div class="v">${v}</div></div>`;}
+function errBox(e){return `<div class="empty">Something went wrong: ${esc(e.message)}</div>`;}
+
+/* ============================ Chats (5 columns) ============================ */
+let searchTimer=null;
+async function viewChats(el){
+  el.style.padding='0';el.parentElement.style.padding='0';
+  el.innerHTML=`<div class="chats">
+    <div class="col-filters" id="col-filters"></div>
+    <div class="col-list"><div class="list-head"><div style="display:flex;justify-content:space-between;align-items:center"><b id="list-title">Open</b><span class="cnt" id="list-cnt"></span></div>
+      <input class="search" id="chat-search" placeholder="Search name, phone or company"></div>
+      <div class="list-scroll" id="chat-list"></div></div>
+    <div class="col-convo" id="col-convo"></div>
+    <div class="col-details" id="col-details"></div>
+  </div>`;
+  const cs=$('#chat-search'); cs.value=state.chat.q;
+  cs.oninput=()=>{clearTimeout(searchTimer);searchTimer=setTimeout(()=>{state.chat.q=cs.value.trim();loadChatList();},260);};
+  try{ state.chat.users=(await api('GET','/api/users')).users; }catch(_){}
+  await Promise.all([loadCounts(),loadChatList()]);
+  renderConvo(); renderDetails();
+}
+async function loadCounts(){
+  try{ state.chat.counts=await api('GET','/api/inbox/counts'); }catch(_){ state.chat.counts={}; }
+  renderFilters();
+}
+function renderFilters(){
+  const c=state.chat.counts; const v=state.chat.view;
+  const item=(key,label)=>`<div class="fitem ${v===key?'active':''}" data-v="${key}"><span>${label}</span><span class="badge">${c[key]??0}</span></div>`;
+  const active = state.chat.q || !['open'].includes(v) || state.chat.ownerFilter || state.chat.tagFilter;
+  $('#col-filters').innerHTML=`
+    ${item('open','Open')}${item('closed','Closed')}${item('awaiting','Awaiting reply')}${item('unread','Unread')}${item('all','All')}
+    <div class="fsep"></div>
+    ${item('mine','My chats')}${item('unassigned','Unassigned')}
+    <div class="fsep"></div>
+    <div class="field" style="margin:6px 4px"><label>Team member</label>
+      <select class="select" id="owner-filter"><option value="">Everyone</option>${(state.chat.users||[]).map(u=>`<option value="${u.id}" ${String(state.chat.ownerFilter)===String(u.id)?'selected':''}>${esc(u.name)}</option>`).join('')}</select></div>
+    <div class="field" style="margin:6px 4px"><label>Tag</label>
+      <input class="input" id="tag-filter" placeholder="tag" value="${esc(state.chat.tagFilter||'')}"></div>
+    ${active?'<div style="padding:4px"><button class="btn sm" id="clear-filters" style="width:100%">Clear filters</button></div>':''}`;
+  $$('#col-filters .fitem').forEach(f=>f.onclick=()=>{state.chat.view=f.dataset.v;loadChatList();renderFilters();});
+  $('#owner-filter').onchange=(e)=>{state.chat.ownerFilter=e.target.value;loadChatList();renderFilters();};
+  const tf=$('#tag-filter'); tf.onchange=(e)=>{state.chat.tagFilter=e.target.value.trim();loadChatList();renderFilters();};
+  const cf=$('#clear-filters'); if(cf)cf.onclick=()=>{state.chat.view='open';state.chat.q='';state.chat.ownerFilter='';state.chat.tagFilter='';const s=$('#chat-search');if(s)s.value='';loadChatList();renderFilters();};
+  $('#list-title').textContent={open:'Open',closed:'Closed',awaiting:'Awaiting reply',unread:'Unread',all:'All chats',mine:'My chats',unassigned:'Unassigned'}[v]||v;
+}
+async function loadChatList(){
+  const list=$('#chat-list'); if(!list)return; list.innerHTML='<div class="spinner"></div>';
+  const p=new URLSearchParams(); p.set('view',state.chat.view);
+  if(state.chat.q)p.set('q',state.chat.q); if(state.chat.ownerFilter)p.set('owner',state.chat.ownerFilter); if(state.chat.tagFilter)p.set('tag',state.chat.tagFilter);
+  try{
+    const d=await api('GET','/api/contacts?'+p.toString()); state.chat.contacts=d.contacts;
+    $('#list-cnt').textContent=d.contacts.length+' chat'+(d.contacts.length===1?'':'s');
+    if(!d.contacts.length){list.innerHTML=`<div class="empty">No conversations here.<br><a href="#" id="sim-here">Simulate an incoming message</a></div>`;
+      const s=$('#sim-here'); if(s)s.onclick=(e)=>{e.preventDefault();openSimulateModal();};return;}
+    list.innerHTML=d.contacts.map(ct=>{
+      const tags=(ct.tags||[]).slice(0,2).map(t=>`<span class="chip">${esc(t)}</span>`).join('');
+      return `<div class="chatrow ${state.chat.contactId===ct.id?'active':''}" data-id="${ct.id}">
+        <div class="avatar">${initials(ct.name)}</div>
+        <div class="body"><div class="top"><span class="nm">${esc(ct.name)}</span><span class="tm">${fmtTime(ct.last_message_at)}</span></div>
+        <div class="ph">${esc(ct.phone||'')} ${ct.last_direction==='out'?'<span class="tick">✓✓</span>':''}</div>
+        <div class="tags">${tags}${ct.status==='closed'?'<span class="chip green">Resolved</span>':''}</div></div>
+        ${ct.unread>0?`<span class="unread">${ct.unread}</span>`:''}</div>`;}).join('');
+    $$('#chat-list .chatrow').forEach(r=>r.onclick=()=>{state.chat.contactId=parseInt(r.dataset.id,10);openContact();});
+  }catch(e){list.innerHTML=errBox(e);}
+}
+async function openContact(){
+  $$('#chat-list .chatrow').forEach(r=>r.classList.toggle('active',parseInt(r.dataset.id,10)===state.chat.contactId));
+  const convo=$('#col-convo'); convo.innerHTML='<div class="spinner"></div>';
+  try{
+    const d=await api('GET','/api/messages/'+state.chat.contactId);
+    state.chat.messages=d.messages; state.chat.current=d.contact;
+    // update unread badge locally
+    const row=state.chat.contacts.find(c=>c.id===state.chat.contactId); if(row)row.unread=0;
+    const badge=$(`#chat-list .chatrow[data-id="${state.chat.contactId}"] .unread`); if(badge)badge.remove();
+    renderConvo(); renderDetails();
+  }catch(e){convo.innerHTML=errBox(e);}
+}
+function renderConvo(){
+  const convo=$('#col-convo'); if(!convo)return;
+  const ct=state.chat.current;
+  if(!ct){convo.innerHTML='<div class="empty" style="margin:auto">Select a conversation to start messaging.<br><a href="#" id="sim-empty">Simulate an incoming message</a></div>';
+    const s=$('#sim-empty');if(s)s.onclick=(e)=>{e.preventDefault();openSimulateModal();};return;}
+  const closed=ct.status==='closed';
+  convo.innerHTML=`
+    <div class="convo-head"><div class="avatar">${initials(ct.name)}</div>
+      <div class="meta"><div class="nm">${esc(ct.name)}</div><div class="ph">${esc(ct.phone||'')}</div></div>
+      <select class="select" id="assignee" style="width:150px;height:34px">
+        <option value="">Unassigned</option>
+        ${(state.chat.users||[]).map(u=>`<option value="${u.id}" ${String(ct.owner_user_id)===String(u.id)?'selected':''}>${esc(u.name)}</option>`).join('')}</select>
+      <button class="btn sm ${closed?'':'primary'}" id="resolve-btn">${closed?'Reopen':'Resolve'}</button>
+    </div>
+    <div class="msgs" id="msgs">${renderMsgs(state.chat.messages)}</div>
+    <div class="composer">
+      <div class="qr-pop hidden" id="qr-pop"></div>
+      <div class="row">
+        <button class="btn" id="qr-btn" title="Quick replies">⚡</button>
+        <textarea id="composer-input" placeholder="Type a message…  (press / for quick replies)" rows="1"></textarea>
+        <button class="btn primary" id="send-btn">Send</button>
+      </div>
+    </div>`;
+  const m=$('#msgs'); m.scrollTop=m.scrollHeight;
+  $('#resolve-btn').onclick=async()=>{ try{ const r=await api('POST','/api/contacts/'+ct.id+'/status',{status:closed?'open':'closed'});
+    state.chat.current=r.contact; toast(closed?'Conversation reopened':'Conversation resolved','ok'); await openContact(); loadCounts(); loadChatList(); }catch(e){toast(e.message,'err');} };
+  $('#assignee').onchange=async(e)=>{ try{ await api('PATCH','/api/contacts/'+ct.id,{owner_user_id:e.target.value||null}); ct.owner_user_id=e.target.value||null; toast('Assignee updated','ok'); loadCounts(); }catch(err){toast(err.message,'err');} };
+  const input=$('#composer-input');
+  input.oninput=()=>{input.style.height='auto';input.style.height=Math.min(input.scrollHeight,120)+'px';handleQR(input);};
+  input.onkeydown=(e)=>{ const pop=$('#qr-pop');
+    if(!pop.classList.contains('hidden')){
+      if(e.key==='Escape'){pop.classList.add('hidden');e.preventDefault();return;}
+      if(e.key==='Enter'){const first=$('.qr-item',pop);if(first){e.preventDefault();first.click();return;}}
+    }
+    if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}};
+  $('#send-btn').onclick=sendMessage;
+  $('#qr-btn').onclick=()=>{input.value='/';handleQR(input);input.focus();};
+}
+function renderMsgs(msgs){
+  if(!msgs.length)return '<div class="empty" style="margin:auto">No messages yet. Say hello 👋</div>';
+  return msgs.map(mm=>{
+    if(mm.direction==='note')return `<div class="note">📝 ${esc(mm.body)} <span style="opacity:.7">· ${fmtTime(mm.created_at)}</span></div>`;
+    const out=mm.direction==='out';
+    const tick=out?tickFor(mm.status):'';
+    return `<div class="bubble ${out?'out':'in'}">
+      ${out&&mm.sender_name?`<div class="sender">${esc(mm.sender_name)}</div>`:''}
+      ${esc(mm.body)}
+      <div class="meta">${fmtTime(mm.created_at)} ${tick}</div></div>`;}).join('');
+}
+function tickFor(s){ if(s==='read')return '<span class="tick read">✓✓</span>'; if(s==='delivered')return '<span class="tick">✓✓</span>';
+  if(s==='sent')return '<span class="tick">✓</span>'; if(s==='failed')return '<span style="color:var(--red)">⚠ failed</span>';
+  return '<span class="tick" title="Demo — not sent to WhatsApp">· demo</span>'; }
+async function sendMessage(){
+  const input=$('#composer-input'); const body=input.value.trim(); if(!body)return;
+  $('#qr-pop').classList.add('hidden');
+  try{ const r=await api('POST','/api/messages/'+state.chat.contactId,{body,direction:'out'});
+    state.chat.messages.push(r.message); if(r.contact)state.chat.current=r.contact;
+    input.value='';input.style.height='auto'; $('#msgs').innerHTML=renderMsgs(state.chat.messages);
+    const m=$('#msgs');m.scrollTop=m.scrollHeight; loadCounts(); loadChatList();
+  }catch(e){toast(e.message,'err');}
+}
+let qrCache=null;
+async function handleQR(input){
+  const pop=$('#qr-pop'); const val=input.value;
+  if(val[0]!=='/'){pop.classList.add('hidden');return;}
+  const q=val.slice(1).toLowerCase();
+  if(!qrCache){ try{ qrCache=(await api('GET','/api/quick-replies')).quickReplies; }catch(_){qrCache=[];} }
+  const matches=qrCache.filter(r=>r.title.toLowerCase().includes(q)||(r.shortcut||'').toLowerCase().includes(q));
+  if(!matches.length){pop.classList.add('hidden');return;}
+  pop.classList.remove('hidden');
+  pop.innerHTML=matches.map(r=>`<div class="qr-item" data-id="${r.id}"><div class="t">${esc(r.title)} ${r.shortcut?`<span class="mut">/${esc(r.shortcut)}</span>`:''}</div><div class="b">${esc(r.body)}</div></div>`).join('');
+  $$('.qr-item',pop).forEach(it=>it.onclick=async()=>{
+    const r=qrCache.find(x=>String(x.id)===it.dataset.id);
+    const ct=state.chat.current;
+    input.value=r.body.replace(/\{name\}/g,firstName(ct&&ct.name)); pop.classList.add('hidden'); input.focus();
+    input.style.height='auto';input.style.height=Math.min(input.scrollHeight,120)+'px';
+    try{ await api('PATCH','/api/quick-replies/'+r.id,{used:true}); }catch(_){}
+  });
+}
+function renderDetails(){
+  const d=$('#col-details'); if(!d)return; const ct=state.chat.current;
+  if(!ct){d.innerHTML='<div class="empty">No conversation selected.</div>';return;}
+  const tab=state.chat.tab;
+  d.innerHTML=`<div class="detail-tabs"><button data-t="details" class="${tab==='details'?'active':''}">Details</button><button data-t="notes" class="${tab==='notes'?'active':''}">Notes</button></div>
+    <div class="detail-body" id="detail-body"></div>`;
+  $$('.detail-tabs button').forEach(b=>b.onclick=()=>{state.chat.tab=b.dataset.t;renderDetails();});
+  const body=$('#detail-body');
+  if(tab==='details'){
+    body.innerHTML=`
+      <div style="text-align:center;margin-bottom:16px"><div class="avatar lg" style="margin:0 auto 8px">${initials(ct.name)}</div><div style="font-weight:600">${esc(ct.name)}</div><div class="mut">${esc(ct.phone||'')}</div></div>
+      <div class="drow"><div class="l">Company</div><input class="input" id="d-company" value="${esc(ct.company||'')}"></div>
+      <div class="drow"><div class="l">Source</div><div>${esc(ct.source||'—')}</div></div>
+      <div class="drow"><div class="l">Conversation status</div><div>${ct.status==='closed'?'<span class="chip green">Resolved</span>':'<span class="chip amber">Open</span>'}</div></div>
+      <div class="drow"><div class="l">Lead stage</div><select class="select" id="d-stage">${STAGES.map(s=>`<option ${s===ct.stage?'selected':''}>${s}</option>`).join('')}</select></div>
+      <div class="drow"><div class="l">Tags</div><div class="tag-chips" id="d-tags">${(ct.tags||[]).map(t=>`<span class="chip">${esc(t)} <span class="x" data-t="${esc(t)}">✕</span></span>`).join('')||'<span class="mut" style="font-size:12px">No tags</span>'}</div>
+        <input class="input" id="d-addtag" placeholder="Add tag + Enter" style="margin-top:8px"></div>`;
+    $('#d-stage').onchange=async(e)=>{try{await api('PATCH','/api/contacts/'+ct.id,{stage:e.target.value});ct.stage=e.target.value;toast('Stage updated','ok');loadChatList();}catch(err){toast(err.message,'err');}};
+    $('#d-company').onchange=async(e)=>{try{await api('PATCH','/api/contacts/'+ct.id,{company:e.target.value});ct.company=e.target.value;}catch(err){toast(err.message,'err');}};
+    $('#d-addtag').onkeydown=async(e)=>{if(e.key==='Enter'){e.preventDefault();const t=e.target.value.trim();if(!t)return;const tags=[...(ct.tags||[]),t];try{await api('PATCH','/api/contacts/'+ct.id,{tags});ct.tags=tags;renderDetails();loadChatList();}catch(err){toast(err.message,'err');}}};
+    $$('#d-tags .x').forEach(x=>x.onclick=async()=>{const tags=(ct.tags||[]).filter(t=>t!==x.dataset.t);try{await api('PATCH','/api/contacts/'+ct.id,{tags});ct.tags=tags;renderDetails();loadChatList();}catch(err){toast(err.message,'err');}});
+  }else{
+    const notes=state.chat.messages.filter(m=>m.direction==='note');
+    body.innerHTML=`<button class="btn primary sm" id="add-note" style="width:100%;margin-bottom:14px">➕ Add note</button>
+      ${notes.length?notes.map(n=>`<div class="note" style="max-width:100%;margin-bottom:10px;text-align:left">${esc(n.body)}<div class="mut" style="font-size:11px;margin-top:4px">${fmtTime(n.created_at)}${n.sender_name?' · '+esc(n.sender_name):''}</div></div>`).join(''):'<div class="empty">No internal notes yet.</div>'}`;
+    $('#add-note').onclick=()=>{ modal('Add internal note',`<div class="field"><textarea class="input" id="note-body" placeholder="Visible to your team only"></textarea></div>`,
+      [{label:'Cancel',cls:'btn',close:true},{label:'Add note',cls:'btn primary',act:async()=>{const b=$('#note-body').value.trim();if(!b)return;await api('POST','/api/messages/'+ct.id,{body:b,direction:'note'});const d=await api('GET','/api/messages/'+ct.id);state.chat.messages=d.messages;closeModal();renderDetails();$('#msgs').innerHTML=renderMsgs(state.chat.messages);toast('Note added','ok');}}]); };
+  }
+}
+function openSimulateModal(){
+  modal('Simulate incoming message',`
+    <p class="mut" style="margin-top:0">Test your inbox and bots without a live WhatsApp number.</p>
+    <div class="field"><label>Phone number</label><input class="input" id="sim-phone" placeholder="+15551234567"></div>
+    <div class="field"><label>Contact name</label><input class="input" id="sim-name" placeholder="Jane Doe"></div>
+    <div class="field"><label>Message</label><textarea class="input" id="sim-body" placeholder="Hi, I'm interested…"></textarea></div>`,
+    [{label:'Cancel',cls:'btn',close:true},{label:'Send incoming',cls:'btn primary',act:async()=>{
+      const phone=$('#sim-phone').value.trim(),name=$('#sim-name').value.trim(),body=$('#sim-body').value.trim();
+      if(!phone||!body){toast('Phone and message are required','err');return;}
+      const r=await api('POST','/api/simulate-incoming',{phone,name,body}); closeModal(); toast('Incoming message received','ok');
+      state.chat.view='open'; state.chat.contactId=r.contact.id; await loadCounts(); await loadChatList(); openContact();
+    }}]);
+}
+
+/* ============================ Customers ============================ */
+async function viewCustomers(el){
+  try{
+    const users=(await api('GET','/api/users')).users;
+    const d=await api('GET','/api/contacts?view=all&limit=500'); const contacts=d.contacts;
+    el.innerHTML=`
+    <div class="page-head"><h1>Customers</h1><div class="sr-flex"><button class="btn" id="sim-btn">Simulate incoming</button><button class="btn primary" id="add-btn">➕ Add contact</button></div></div>
+    <div class="filter-row"><input class="input" id="cust-search" placeholder="Search name, phone or company" style="max-width:320px"></div>
+    <div class="card"><table class="tbl"><thead><tr><th>Name</th><th>Phone</th><th>Company</th><th>Stage</th><th>Tags</th><th>Owner</th><th></th></tr></thead>
+      <tbody id="cust-body">${custRows(contacts,users)}</tbody></table>
+      ${!contacts.length?'<div class="empty">No contacts yet. <a href="#" id="add-empty">Add your first contact</a></div>':''}</div>`;
+    const nameOf=(id)=>{const u=users.find(x=>String(x.id)===String(id));return u?u.name:'—';};
+    function bind(){ $$('#cust-body [data-chat]').forEach(b=>b.onclick=()=>{state.chat.contactId=parseInt(b.dataset.chat,10);state.chat.view='all';location.hash='#/chats';setTimeout(openContact,200);});
+      $$('#cust-body [data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this contact?'))return;try{await api('DELETE','/api/contacts/'+b.dataset.del);toast('Contact deleted','ok');viewCustomers(el);}catch(e){toast(e.message,'err');}}); }
+    bind();
+    $('#add-btn').onclick=()=>openContactModal(()=>viewCustomers(el));
+    const ae=$('#add-empty'); if(ae)ae.onclick=(e)=>{e.preventDefault();openContactModal(()=>viewCustomers(el));};
+    $('#sim-btn').onclick=()=>openSimulateModal();
+    const cs=$('#cust-search'); cs.oninput=()=>{const q=cs.value.trim().toLowerCase();
+      const filt=contacts.filter(c=>(c.name||'').toLowerCase().includes(q)||(c.phone||'').toLowerCase().includes(q)||(c.company||'').toLowerCase().includes(q));
+      $('#cust-body').innerHTML=custRows(filt,users);bind();};
+    function custRows(list,users){return list.map(c=>`<tr>
+      <td><div class="sr-flex"><div class="avatar sm">${initials(c.name)}</div><b>${esc(c.name)}</b></div></td>
+      <td class="mut">${esc(c.phone||'—')}</td><td>${esc(c.company||'—')}</td>
+      <td><span class="chip ${c.stage==='Won'?'green':c.stage==='Cold'?'red':''}">${esc(c.stage)}</span></td>
+      <td>${(c.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join(' ')||'<span class="mut">—</span>'}</td>
+      <td class="mut">${esc((users.find(u=>String(u.id)===String(c.owner_user_id))||{}).name||'—')}</td>
+      <td style="text-align:right"><button class="btn sm" data-chat="${c.id}">Chat</button> <button class="btn sm danger" data-del="${c.id}">Delete</button></td></tr>`).join('');}
+  }catch(e){el.innerHTML=errBox(e);}
+}
+function openContactModal(after){
+  modal('Add contact',`
+    <div class="field"><label>Name</label><input class="input" id="c-name"></div>
+    <div class="field"><label>Phone</label><input class="input" id="c-phone" placeholder="+15551234567"></div>
+    <div class="field"><label>Company</label><input class="input" id="c-company"></div>
+    <div class="field"><label>Lead stage</label><select class="select" id="c-stage">${STAGES.map(s=>`<option>${s}</option>`).join('')}</select></div>
+    <div class="field"><label>Tags (comma separated)</label><input class="input" id="c-tags"></div>`,
+    [{label:'Cancel',cls:'btn',close:true},{label:'Add contact',cls:'btn primary',act:async()=>{
+      const name=$('#c-name').value.trim(),phone=$('#c-phone').value.trim();
+      if(!name&&!phone){toast('Name or phone required','err');return;}
+      const tags=$('#c-tags').value.split(',').map(t=>t.trim()).filter(Boolean);
+      try{ await api('POST','/api/contacts',{name,phone,company:$('#c-company').value.trim(),stage:$('#c-stage').value,tags});
+        closeModal();toast('Contact added','ok'); if(after)after(); }
+      catch(e){ toast(e.message,'err'); }
+    }}]);
+}
+
+/* ============================ Templates ============================ */
+async function viewTemplates(el){
+  try{
+    const t=(await api('GET','/api/templates')).templates; const canEdit=state.me.user.role!=='agent'||state.me.isSuperAdmin;
+    el.innerHTML=`<div class="page-head"><h1>Templates</h1>${canEdit?'<button class="btn primary" id="add-tpl">➕ New template</button>':''}</div>
+    <div class="banner">ℹ️ <div>Templates must also be approved in <b>Meta WhatsApp Manager</b>, and the names must match exactly.</div></div>
+    ${t.length?`<div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">${t.map(tp=>`
+      <div class="card pad"><div style="display:flex;justify-content:space-between;align-items:start">
+        <div><div style="font-weight:600">${esc(tp.name)}</div><div style="margin-top:4px"><span class="chip">${esc(tp.category)}</span> <span class="chip ${tp.status==='approved'?'green':tp.status==='rejected'?'red':'amber'}">${esc(tp.status)}</span></div></div>
+        ${canEdit?`<button class="x-close" data-del="${tp.id}" title="Delete">🗑</button>`:''}</div>
+        <div style="background:var(--wa-bubble);border-radius:8px;padding:10px 12px;margin-top:12px;font-size:13px;white-space:pre-wrap">${esc(tp.body)}</div>
+        ${canEdit&&tp.status!=='approved'?`<button class="btn sm" data-approve="${tp.id}" style="margin-top:12px">Mark approved</button>`:''}</div>`).join('')}</div>`
+      :'<div class="empty">No templates yet.</div>'}`;
+    const a=$('#add-tpl'); if(a)a.onclick=()=>modal('New template',`
+      <div class="field"><label>Name</label><input class="input" id="t-name" placeholder="order_confirmation"><div class="mut" style="font-size:11px;margin-top:4px">Will be normalised to lowercase_with_underscores.</div></div>
+      <div class="field"><label>Category</label><select class="select" id="t-cat"><option>MARKETING</option><option>UTILITY</option><option>AUTHENTICATION</option></select></div>
+      <div class="field"><label>Message body</label><textarea class="input" id="t-body" placeholder="Hi {name}, your order is confirmed!"></textarea></div>`,
+      [{label:'Cancel',cls:'btn',close:true},{label:'Create',cls:'btn primary',act:async()=>{const name=$('#t-name').value.trim(),body=$('#t-body').value.trim();if(!name||!body){toast('Name and body required','err');return;}await api('POST','/api/templates',{name,category:$('#t-cat').value,body});closeModal();toast('Template created','ok');viewTemplates(el);}}]);
+    $$('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete template?'))return;await api('DELETE','/api/templates/'+b.dataset.del);toast('Deleted','ok');viewTemplates(el);});
+    $$('[data-approve]').forEach(b=>b.onclick=async()=>{await api('PATCH','/api/templates/'+b.dataset.approve,{status:'approved'});toast('Marked approved','ok');viewTemplates(el);});
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Broadcast ============================ */
+async function viewBroadcast(el){
+  try{
+    const camps=(await api('GET','/api/campaigns')).campaigns;
+    const canLaunch=state.me.user.role!=='agent'||state.me.isSuperAdmin;
+    el.innerHTML=`<div class="page-head"><h1>Broadcast</h1>${canLaunch?'<button class="btn primary" id="new-camp">📣 New broadcast</button>':''}</div>
+    <div class="card"><table class="tbl"><thead><tr><th>Campaign</th><th>Template</th><th>Segment</th><th>Audience</th><th>Sent</th><th>Delivered</th><th>Failed</th><th>Status</th><th>When</th>${canLaunch?'<th></th>':''}</tr></thead>
+      <tbody>${camps.map(c=>{const st=c.status;const chip=st==='sent'?'green':st==='scheduled'?'amber':st==='cancelled'||st==='failed'?'red':'';
+        const when=st==='scheduled'?('⏰ '+fmtDateTime(c.scheduled_at)):fmtDate(c.created_at);
+        return `<tr><td><b>${esc(c.name)}</b></td><td>${esc(c.template_name||'—')}</td><td>${esc(c.segment||'—')}</td>
+        <td>${c.audience}</td><td>${c.sent}</td><td>${c.delivered}</td><td>${c.failed}</td><td><span class="chip ${chip}">${esc(st)}</span></td><td class="mut">${when}</td>
+        ${canLaunch?`<td style="text-align:right">${st==='scheduled'?`<button class="btn sm danger" data-cancel="${c.id}">Cancel</button>`:''}</td>`:''}</tr>`;}).join('')}</tbody></table>
+      ${!camps.length?'<div class="empty">No campaigns yet.</div>':''}</div>`;
+    $$('[data-cancel]').forEach(b=>b.onclick=async()=>{if(!confirm('Cancel this scheduled broadcast?'))return;try{await api('PATCH','/api/campaigns/'+b.dataset.cancel,{status:'cancelled'});toast('Broadcast cancelled','ok');viewBroadcast(el);}catch(e){toast(e.message,'err');}});
+    const nc=$('#new-camp'); if(nc)nc.onclick=async()=>{
+      const tpls=(await api('GET','/api/templates')).templates.filter(t=>t.status==='approved');
+      if(!tpls.length){toast('Create and approve a template first','err');return;}
+      modal('New broadcast',`
+        <div class="field"><label>Campaign name</label><input class="input" id="b-name"></div>
+        <div class="field"><label>Template (approved)</label><select class="select" id="b-tpl">${tpls.map(t=>`<option value="${t.id}">${esc(t.name)}</option>`).join('')}</select></div>
+        <div class="field"><label>Segment</label><select class="select" id="b-seg"><option value="all">All contacts</option><option value="tag">By tag</option><option value="stage">By lead stage</option></select></div>
+        <div class="field hidden" id="b-tag-f"><label>Tag</label><input class="input" id="b-tag"></div>
+        <div class="field hidden" id="b-stage-f"><label>Stage</label><select class="select" id="b-stage">${STAGES.map(s=>`<option>${s}</option>`).join('')}</select></div>
+        <div class="field"><label>Send</label><select class="select" id="b-when"><option value="now">Immediately</option><option value="later">Schedule for later</option></select></div>
+        <div class="field hidden" id="b-sched-f"><label>Scheduled time</label><input class="input" id="b-sched" type="datetime-local"></div>`,
+        [{label:'Cancel',cls:'btn',close:true},{label:'Launch',cls:'btn primary',act:async()=>{
+          const type=$('#b-seg').value; const seg={type}; if(type==='tag')seg.value=$('#b-tag').value.trim(); if(type==='stage')seg.value=$('#b-stage').value;
+          const payload={name:$('#b-name').value.trim(),template_id:parseInt($('#b-tpl').value,10),segment:seg};
+          if($('#b-when').value==='later'){const dv=$('#b-sched').value;if(!dv){toast('Pick a schedule time','err');return;}payload.scheduled_at=new Date(dv).toISOString();}
+          try{const r=await api('POST','/api/campaigns',payload);closeModal();
+            toast(r.campaign.status==='scheduled'?`Broadcast scheduled for ${r.campaign.audience} contacts`:`Broadcast sent to ${r.campaign.audience} contacts`,'ok');viewBroadcast(el);}catch(e){toast(e.message,'err');}
+        }}]);
+      $('#b-seg').onchange=(e)=>{$('#b-tag-f').classList.toggle('hidden',e.target.value!=='tag');$('#b-stage-f').classList.toggle('hidden',e.target.value!=='stage');};
+      $('#b-when').onchange=(e)=>{$('#b-sched-f').classList.toggle('hidden',e.target.value!=='later');};
+    };
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Bot studio ============================ */
+async function viewBots(el){
+  try{
+    const bots=(await api('GET','/api/bots')).bots; const canEdit=state.me.user.role!=='agent'||state.me.isSuperAdmin;
+    el.innerHTML=`<div class="page-head"><h1>Bot studio</h1>${canEdit?'<button class="btn primary" id="new-bot">🤖 New bot</button>':''}</div>
+    ${bots.length?`<div class="kpis" style="grid-template-columns:repeat(auto-fill,minmax(300px,1fr))">${bots.map(b=>`
+      <div class="card pad"><div style="display:flex;justify-content:space-between;align-items:center">
+        <div style="font-weight:600">${esc(b.name)}</div>
+        <div class="toggle ${b.active?'on':''}" data-toggle="${b.id}" data-active="${b.active}"></div></div>
+        <div class="mut" style="font-size:12px;margin-top:6px">${b.trigger_type==='welcome'?'Fires on first message from a new contact':'Fires when a message contains: <b>'+esc(b.keyword||'')+'</b>'}</div>
+        <div style="background:var(--wa-bubble);border-radius:8px;padding:10px 12px;margin-top:10px;font-size:13px;white-space:pre-wrap">${esc(b.reply)}</div>
+        <div class="sr-flex" style="justify-content:space-between;margin-top:10px"><span class="mut" style="font-size:12px">↻ ${b.runs} runs</span>
+        ${canEdit?`<button class="btn sm danger" data-del="${b.id}">Delete</button>`:''}</div></div>`).join('')}</div>`
+      :'<div class="empty">No bots yet.</div>'}`;
+    $$('[data-toggle]').forEach(t=>t.onclick=async()=>{const cur=t.dataset.active==='true';try{await api('PATCH','/api/bots/'+t.dataset.toggle,{active:!cur});viewBots(el);}catch(e){toast(e.message,'err');}});
+    $$('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('Delete this bot?'))return;await api('DELETE','/api/bots/'+b.dataset.del);toast('Deleted','ok');viewBots(el);});
+    const nb=$('#new-bot'); if(nb)nb.onclick=()=>modal('New bot',`
+      <div class="field"><label>Bot name</label><input class="input" id="bot-name"></div>
+      <div class="field"><label>Trigger</label><select class="select" id="bot-trig"><option value="keyword">Keyword</option><option value="welcome">Welcome (first message)</option></select></div>
+      <div class="field" id="bot-kw-f"><label>Keyword</label><input class="input" id="bot-kw" placeholder="pricing"></div>
+      <div class="field"><label>Reply</label><textarea class="input" id="bot-reply" placeholder="Use {name} to personalise"></textarea></div>`,
+      [{label:'Cancel',cls:'btn',close:true},{label:'Create bot',cls:'btn primary',act:async()=>{
+        const name=$('#bot-name').value.trim(),trigger_type=$('#bot-trig').value,keyword=$('#bot-kw').value.trim(),reply=$('#bot-reply').value.trim();
+        if(!name||!reply){toast('Name and reply required','err');return;}
+        if(trigger_type==='keyword'&&!keyword){toast('Keyword required','err');return;}
+        try{await api('POST','/api/bots',{name,trigger_type,keyword,reply});closeModal();toast('Bot created','ok');viewBots(el);}catch(e){toast(e.message,'err');}
+      }}]);
+    const bt=$('#bot-trig'); // set inside modal via delegation
+    document.addEventListener('change',(ev)=>{if(ev.target&&ev.target.id==='bot-trig'){const f=$('#bot-kw-f');if(f)f.classList.toggle('hidden',ev.target.value!=='keyword');}});
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Analytics ============================ */
+function fmtDuration(sec){ if(!sec||sec<=0)return '—'; if(sec<60)return Math.round(sec)+'s'; if(sec<3600)return Math.round(sec/60)+'m'; return (sec/3600).toFixed(1)+'h'; }
+async function viewAnalytics(el){
+  try{
+    const a=await api('GET','/api/analytics');
+    const maxSent=Math.max(1,...a.agents.map(x=>x.sent));
+    el.innerHTML=`<div class="page-head"><h1>Analytics</h1></div>
+      <div class="kpis">
+        ${kpi('Avg. response time',fmtDuration(a.avgResponseSeconds))}
+        ${kpi('Conversations',a.conversationsOpened)}
+        ${kpi('Replied',a.conversationsReplied)}
+        ${kpi('Reply rate',a.replyRate+'%')}
+        ${kpi('Inbound (30d)',a.inbound30d)}
+        ${kpi('Outbound (30d)',a.outbound30d)}
+      </div>
+      <div class="card pad"><div style="font-weight:600;margin-bottom:12px">Agent performance</div>
+        ${a.agents.length?`<table class="tbl"><thead><tr><th>Agent</th><th>Role</th><th>Messages sent</th><th>Conversations resolved</th><th>Assigned contacts</th></tr></thead>
+          <tbody>${a.agents.map(u=>`<tr>
+            <td><div class="sr-flex"><div class="avatar sm">${initials(u.name)}</div><b>${esc(u.name)}</b></div></td>
+            <td><span class="chip">${esc(u.role)}</span></td>
+            <td><div class="sr-flex" style="gap:8px"><b>${u.sent}</b><div class="usage-bar" style="flex:1;max-width:120px"><span style="width:${Math.round(u.sent/maxSent*100)}%"></span></div></div></td>
+            <td>${u.resolved}</td><td>${u.assigned}</td></tr>`).join('')}</tbody></table>`
+          :'<div class="empty">No agent activity yet.</div>'}</div>`;
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Team ============================ */
+async function viewTeam(el){
+  try{
+    const users=(await api('GET','/api/users')).users; const canManage=state.me.user.role!=='agent'||state.me.isSuperAdmin;
+    el.innerHTML=`<div class="page-head"><h1>Team</h1>${canManage?'<button class="btn primary" id="add-user">➕ Add member</button>':''}</div>
+    <div class="card"><table class="tbl"><thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Status</th><th>Joined</th>${canManage?'<th></th>':''}</tr></thead>
+      <tbody>${users.map(u=>`<tr>
+        <td><div class="sr-flex"><div class="avatar sm">${initials(u.name)}</div><b>${esc(u.name)}</b></div></td>
+        <td class="mut">${esc(u.email)}</td>
+        <td>${u.role==='owner'?'<span class="chip green">owner</span>':(canManage?`<select class="select" data-role="${u.id}" style="height:32px;width:120px"><option value="admin" ${u.role==='admin'?'selected':''}>admin</option><option value="agent" ${u.role==='agent'?'selected':''}>agent</option></select>`:`<span class="chip">${u.role}</span>`)}</td>
+        <td>${u.active?'<span class="chip green">Active</span>':'<span class="chip red">Inactive</span>'}</td>
+        <td class="mut">${fmtDate(u.created_at)}</td>
+        ${canManage?`<td style="text-align:right">${u.role==='owner'?'<span class="mut">—</span>':`<button class="btn sm" data-toggle="${u.id}" data-active="${u.active}">${u.active?'Deactivate':'Reactivate'}</button> <button class="btn sm danger" data-del="${u.id}">Remove</button>`}</td>`:''}
+      </tr>`).join('')}</tbody></table></div>`;
+    $$('[data-role]').forEach(s=>s.onchange=async()=>{try{await api('PATCH','/api/users/'+s.dataset.role,{role:s.value});toast('Role updated','ok');}catch(e){toast(e.message,'err');viewTeam(el);}});
+    $$('[data-toggle]').forEach(b=>b.onclick=async()=>{try{await api('PATCH','/api/users/'+b.dataset.toggle,{active:!(b.dataset.active==='true')});toast('Updated','ok');viewTeam(el);}catch(e){toast(e.message,'err');}});
+    $$('[data-del]').forEach(b=>b.onclick=async()=>{if(!confirm('Remove this member?'))return;try{await api('DELETE','/api/users/'+b.dataset.del);toast('Removed','ok');viewTeam(el);}catch(e){toast(e.message,'err');}});
+    const au=$('#add-user'); if(au)au.onclick=()=>modal('Add team member',`
+      <div class="field"><label>Name</label><input class="input" id="u-name"></div>
+      <div class="field"><label>Email</label><input class="input" id="u-email" type="email"></div>
+      <div class="field"><label>Temporary password</label><input class="input" id="u-pass" value="${genPw()}"></div>
+      <div class="field"><label>Role</label><select class="select" id="u-role"><option value="agent">agent</option><option value="admin">admin</option></select></div>`,
+      [{label:'Cancel',cls:'btn',close:true},{label:'Add member',cls:'btn primary',act:async()=>{
+        try{await api('POST','/api/users',{name:$('#u-name').value.trim(),email:$('#u-email').value.trim(),password:$('#u-pass').value,role:$('#u-role').value});closeModal();toast('Member added','ok');viewTeam(el);}catch(e){toast(e.message,'err');}
+      }}]);
+  }catch(e){el.innerHTML=errBox(e);}
+}
+function genPw(){const c='ABCDEFGHJKMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789';let s='';for(let i=0;i<10;i++)s+=c[Math.floor(Math.random()*c.length)];return s;}
+
+/* ============================ Settings ============================ */
+async function viewSettings(el){
+  try{
+    const me=await api('GET','/api/me'); state.me=me; const c=me.company; const canEdit=me.user.role!=='agent'||me.isSuperAdmin;
+    const uPct=Math.min(100,Math.round(me.usage.users/c.max_users*100)); const cPct=Math.min(100,Math.round(me.usage.contacts/c.max_contacts*100));
+    el.innerHTML=`
+    <div class="page-head"><h1>Settings</h1></div>
+    <div class="card pad" style="margin-bottom:18px"><div style="font-weight:600;margin-bottom:12px">Plan usage — <span class="chip green">${esc(c.plan)}</span></div>
+      <div class="grid2">
+        <div><div class="sr-flex" style="justify-content:space-between"><span class="mut">Users</span><b>${me.usage.users} / ${c.max_users}</b></div><div class="usage-bar ${uPct>=100?'full':''}"><span style="width:${uPct}%"></span></div></div>
+        <div><div class="sr-flex" style="justify-content:space-between"><span class="mut">Contacts</span><b>${me.usage.contacts} / ${c.max_contacts}</b></div><div class="usage-bar ${cPct>=100?'full':''}"><span style="width:${cPct}%"></span></div></div>
+      </div></div>
+    <div class="card pad" style="margin-bottom:18px"><div style="font-weight:600;margin-bottom:12px">Company profile</div>
+      <div class="grid2">
+        <div class="field"><label>Company name</label><input class="input" id="s-name" value="${esc(c.name)}" ${canEdit?'':'disabled'}></div>
+        <div class="field"><label>Logo emoji</label><input class="input" id="s-emoji" value="${esc(c.logo_emoji||'')}" ${canEdit?'':'disabled'}></div>
+        <div class="field"><label>Industry</label><input class="input" id="s-ind" value="${esc(c.industry||'')}" ${canEdit?'':'disabled'}></div>
+        <div class="field"><label>Country</label><input class="input" id="s-country" value="${esc(c.country||'')}" ${canEdit?'':'disabled'}></div>
+      </div>${canEdit?'<button class="btn primary" id="save-profile">Save profile</button>':''}</div>
+    <div class="card pad"><div style="font-weight:600;margin-bottom:6px">WhatsApp connection</div>
+      <div class="mut" style="font-size:12px;margin-bottom:12px">Connect your Meta WhatsApp Cloud API number. The access token is stored securely and never shown again.</div>
+      <div class="wa-pill ${c.wa_connected?'live':'demo'}" style="margin-bottom:14px"><span class="dot"></span>${c.wa_connected?'Connected':'Demo mode — not connected'}</div>
+      <div class="grid2">
+        <div class="field"><label>Access token ${c.wa_connected?'(stored)':''}</label><input class="input" id="s-token" type="password" placeholder="${c.wa_connected?'••••••••  (leave blank to keep)':'Enter Meta access token'}" ${canEdit?'':'disabled'}></div>
+        <div class="field"><label>Phone number ID</label><input class="input" id="s-phone" value="${esc(c.wa_phone_id||'')}" ${canEdit?'':'disabled'}></div>
+        <div class="field"><label>Webhook verify token</label><input class="input" id="s-verify" value="${esc(c.wa_verify_token||'')}" placeholder="a token you invent" ${canEdit?'':'disabled'}></div>
+        <div class="field"><label>Your webhook URL</label><input class="input" value="${esc(me.webhookUrl)}" readonly onclick="this.select()"></div>
+      </div>${canEdit?'<button class="btn primary" id="save-wa">Save WhatsApp settings</button>':''}</div>`;
+    const sp=$('#save-profile'); if(sp)sp.onclick=async()=>{try{const r=await api('PATCH','/api/company',{name:$('#s-name').value.trim(),logo_emoji:$('#s-emoji').value.trim(),industry:$('#s-ind').value.trim(),country:$('#s-country').value.trim()});state.me.company=r.company;toast('Profile saved','ok');renderApp();}catch(e){toast(e.message,'err');}};
+    const sw=$('#save-wa'); if(sw)sw.onclick=async()=>{const body={wa_phone_id:$('#s-phone').value.trim(),wa_verify_token:$('#s-verify').value.trim()};const tok=$('#s-token').value.trim();if(tok)body.wa_token=tok;try{const r=await api('PATCH','/api/company',body);state.me.company=r.company;toast('WhatsApp settings saved','ok');viewSettings(el);renderApp();}catch(e){toast(e.message,'err');}};
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Platform: Clients ============================ */
+async function viewClients(el){
+  try{
+    const d=await api('GET','/api/admin/overview'); const k=d.kpis;
+    el.innerHTML=`<div class="page-head"><h1>Clients</h1><button class="btn primary" id="new-client">➕ Create client</button></div>
+    <div class="kpis">${kpi('Workspaces',k.workspaces)}${kpi('Active',k.active)}${kpi('Suspended',k.suspended)}${kpi('Total users',k.totalUsers)}${kpi('Total contacts',k.totalContacts)}${kpi('Messages (30d)',k.messages30d)}</div>
+    <div class="card"><table class="tbl"><thead><tr><th>Workspace</th><th>Plan</th><th>Status</th><th>Users</th><th>Contacts</th><th>Msgs 30d</th><th>WhatsApp</th><th>Last activity</th><th></th></tr></thead>
+      <tbody>${d.companies.map(c=>`<tr>
+        <td><b>${esc(c.name)}</b><div class="mut" style="font-size:12px">${esc(c.ownerEmail||'')}</div></td>
+        <td><span class="chip">${esc(c.plan)}</span></td>
+        <td><span class="chip ${c.status==='active'?'green':'red'}">${esc(c.status)}</span></td>
+        <td class="${c.overUsers?'':''}" style="${c.overUsers?'color:var(--red);font-weight:600':''}">${c.users}/${c.maxUsers}</td>
+        <td style="${c.overContacts?'color:var(--red);font-weight:600':''}">${c.contacts}/${c.maxContacts}</td>
+        <td>${c.messages30d}</td>
+        <td>${c.waConnected?'<span class="chip wa">Connected</span>':'<span class="chip amber">Demo</span>'}</td>
+        <td class="mut">${c.lastActivity?fmtDate(c.lastActivity):'—'}</td>
+        <td style="text-align:right;white-space:nowrap">
+          <button class="btn sm" data-imp="${c.id}">Open</button>
+          <button class="btn sm" data-edit="${c.id}">Edit</button>
+          <button class="btn sm" data-more="${c.id}">⋯</button></td></tr>`).join('')}</tbody></table>
+      ${!d.companies.length?'<div class="empty">No client workspaces yet. Create your first client.</div>':''}</div>`;
+    const byId=(id)=>d.companies.find(x=>String(x.id)===String(id));
+    $$('[data-imp]').forEach(b=>b.onclick=()=>impersonate(b.dataset.imp));
+    $$('[data-edit]').forEach(b=>b.onclick=()=>editClientModal(byId(b.dataset.edit),el));
+    $$('[data-more]').forEach(b=>b.onclick=()=>moreClientModal(byId(b.dataset.more),el));
+    $('#new-client').onclick=()=>newClientModal(el);
+  }catch(e){el.innerHTML=errBox(e);}
+}
+async function impersonate(id){ try{
+  if(!state.adminToken){state.adminToken=state.token;localStorage.setItem(LS_ADMIN,state.token);}
+  const r=await api('POST','/api/admin/companies/'+id+'/impersonate'); setToken(r.token);
+  state.me=await api('GET','/api/me'); location.hash='#/dashboard';state.view='dashboard';renderApp();toast('Now viewing '+r.company.name,'ok');
+}catch(e){toast(e.message,'err');} }
+function newClientModal(el){
+  modal('Create client workspace',`
+    <div class="field"><label>Company name</label><input class="input" id="nc-company"></div>
+    <div class="field"><label>Owner name</label><input class="input" id="nc-owner"></div>
+    <div class="field"><label>Owner email</label><input class="input" id="nc-email" type="email"></div>
+    <div class="field"><label>Plan</label><select class="select" id="nc-plan"><option value="trial">Trial</option><option value="starter">Starter</option><option value="pro">Pro</option><option value="business">Business</option></select></div>`,
+    [{label:'Cancel',cls:'btn',close:true},{label:'Create client',cls:'btn primary',act:async()=>{
+      try{const r=await api('POST','/api/admin/companies',{companyName:$('#nc-company').value.trim(),ownerName:$('#nc-owner').value.trim(),ownerEmail:$('#nc-email').value.trim(),plan:$('#nc-plan').value});
+        const cr=r.credentials; showCreds('Client created',cr); viewClients(el);
+      }catch(e){toast(e.message,'err');}
+    }}]);
+}
+function showCreds(title,cr){
+  modal(title,`<p class="mut" style="margin-top:0">Share these credentials with the client. This password is shown only once.</p>
+    <div class="creds"><div class="r"><span>Login URL</span><code>${esc(cr.loginUrl)}</code></div>
+      <div class="r"><span>Email</span><code>${esc(cr.email)}</code></div>
+      <div class="r"><span>Password</span><code>${esc(cr.password)}</code></div></div>`,
+    [{label:'Done',cls:'btn primary',close:true}]);
+}
+function editClientModal(c,el){
+  modal('Edit '+c.name,`
+    <div class="field"><label>Plan</label><select class="select" id="e-plan">${['trial','starter','pro','business'].map(p=>`<option value="${p}" ${c.plan===p?'selected':''}>${p}</option>`).join('')}</select><div class="mut" style="font-size:11px;margin-top:4px">Changing the plan resets limits & modules to its defaults unless you override below.</div></div>
+    <div class="grid2"><div class="field"><label>Max users</label><input class="input" id="e-users" type="number" value="${c.maxUsers}"></div>
+      <div class="field"><label>Max contacts</label><input class="input" id="e-contacts" type="number" value="${c.maxContacts}"></div></div>
+    <div class="field"><label>Modules</label><div id="e-mods">${['inbox','contacts','broadcast','templates','automation'].map(m=>`<label style="display:inline-flex;gap:6px;align-items:center;margin:0 12px 8px 0"><input type="checkbox" value="${m}" ${(c.modules||[]).includes(m)?'checked':''}> ${m}</label>`).join('')}</div></div>
+    <div class="field"><label>Internal notes</label><textarea class="input" id="e-notes">${esc(c.notes||'')}</textarea></div>`,
+    [{label:'Cancel',cls:'btn',close:true},{label:'Save changes',cls:'btn primary',act:async()=>{
+      const modules=$$('#e-mods input:checked').map(x=>x.value);
+      try{await api('PATCH','/api/admin/companies/'+c.id,{plan:$('#e-plan').value,max_users:parseInt($('#e-users').value,10),max_contacts:parseInt($('#e-contacts').value,10),modules,notes:$('#e-notes').value});closeModal();toast('Client updated','ok');viewClients(el);}catch(e){toast(e.message,'err');}
+    }}]);
+  // If plan changes, reflect preset limits in the inputs for convenience
+  $('#e-plan').onchange=async(e)=>{ try{const plans=(await api('GET','/api/admin/plans')).plans;const p=plans[e.target.value];if(p){$('#e-users').value=p.max_users;$('#e-contacts').value=p.max_contacts;$$('#e-mods input').forEach(x=>x.checked=p.modules.includes(x.value));}}catch(_){}}; 
+}
+function moreClientModal(c,el){
+  modal('Manage '+c.name,`
+    <div class="sr-flex" style="flex-direction:column;align-items:stretch;gap:10px">
+      <button class="btn" id="m-reset">🔑 Reset owner password</button>
+      <button class="btn" id="m-suspend">${c.status==='active'?'⏸ Suspend workspace':'▶ Reactivate workspace'}</button>
+      <button class="btn danger" id="m-delete">🗑 Delete workspace</button>
+    </div>`,[{label:'Close',cls:'btn',close:true}]);
+  $('#m-reset').onclick=async()=>{try{const r=await api('POST','/api/admin/companies/'+c.id+'/reset-password');showCreds('Password reset',{loginUrl:location.origin+'/',email:r.email,password:r.password});}catch(e){toast(e.message,'err');}};
+  $('#m-suspend').onclick=async()=>{try{await api('PATCH','/api/admin/companies/'+c.id,{status:c.status==='active'?'suspended':'active'});closeModal();toast('Updated','ok');viewClients(el);}catch(e){toast(e.message,'err');}};
+  $('#m-delete').onclick=()=>{ modal('Delete '+c.name,`<p>This permanently deletes the workspace and <b>all its data</b>. This cannot be undone.</p>
+    <div class="field"><label>Type the workspace name to confirm</label><input class="input" id="del-confirm" placeholder="${esc(c.name)}"></div>`,
+    [{label:'Cancel',cls:'btn',close:true},{label:'Delete forever',cls:'btn danger',act:async()=>{const v=$('#del-confirm').value;
+      try{await api('DELETE','/api/admin/companies/'+c.id+'?confirm='+encodeURIComponent(v));closeModal();toast('Workspace deleted','ok');viewClients(el);}catch(e){toast(e.message,'err');}}}]); };
+}
+
+/* ============================ Platform: Settings ============================ */
+async function viewPlatformSettings(el){
+  try{
+    const s=await api('GET','/api/admin/settings'); const plans=(await api('GET','/api/admin/plans')).plans;
+    el.innerHTML=`<div class="page-head"><h1>Platform settings</h1></div>
+      <div class="card pad" style="margin-bottom:18px"><div class="sr-flex" style="justify-content:space-between">
+        <div><div style="font-weight:600">Public sign-up</div><div class="mut" style="font-size:12px">When on, anyone can self-register a new workspace.</div></div>
+        <div class="toggle ${s.registrationOpen?'on':''}" id="reg-toggle"></div></div></div>
+      <div class="card pad" style="margin-bottom:18px"><div style="font-weight:600;margin-bottom:10px">Platform</div>
+        <div class="creds"><div class="r"><span>Platform owner email</span><code>${esc(s.superAdminEmail)}</code></div>
+        <div class="r"><span>Client login URL</span><code>${esc(s.loginUrl)}</code></div></div></div>
+      <div class="card pad"><div style="font-weight:600;margin-bottom:10px">Plan presets</div>
+        <table class="tbl"><thead><tr><th>Plan</th><th>Max users</th><th>Max contacts</th><th>Modules</th></tr></thead>
+        <tbody>${Object.entries(plans).map(([name,p])=>`<tr><td><span class="chip">${name}</span></td><td>${p.max_users}</td><td>${p.max_contacts.toLocaleString()}</td><td>${p.modules.map(m=>`<span class="chip">${m}</span>`).join(' ')}</td></tr>`).join('')}</tbody></table></div>`;
+    $('#reg-toggle').onclick=async(e)=>{const cur=e.target.classList.contains('on');try{const r=await api('PATCH','/api/admin/settings',{registrationOpen:!cur});e.target.classList.toggle('on',r.registrationOpen);toast('Updated','ok');}catch(err){toast(err.message,'err');}};
+  }catch(e){el.innerHTML=errBox(e);}
+}
+
+/* ============================ Modal helper ============================ */
+function modal(title,bodyHtml,buttons){
+  const root=$('#modal-root');
+  root.innerHTML=`<div class="modal-back" id="modal-back"><div class="modal ${buttons&&buttons._wide?'wide':''}">
+    <div class="modal-head"><h3>${esc(title)}</h3><button class="x-close" id="modal-x">✕</button></div>
+    <div class="modal-body">${bodyHtml}</div>
+    <div class="modal-foot" id="modal-foot"></div></div></div>`;
+  const foot=$('#modal-foot');
+  (buttons||[{label:'Close',cls:'btn',close:true}]).forEach(b=>{const btn=document.createElement('button');btn.className=b.cls;btn.textContent=b.label;
+    btn.onclick=async()=>{ if(b.act){btn.disabled=true;try{await b.act();}catch(e){toast(e.message,'err');}btn.disabled=false;} if(b.close)closeModal(); };
+    foot.appendChild(btn);});
+  $('#modal-x').onclick=closeModal;
+  $('#modal-back').onclick=(e)=>{if(e.target.id==='modal-back')closeModal();};
+}
+function closeModal(){$('#modal-root').innerHTML='';}
+</script>
+</body>
+</html>
