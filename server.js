@@ -20,7 +20,11 @@ app.use(express.json({ limit: '2mb' }));
 // ---------------------------------------------------------------------------
 const NODE_ENV = process.env.NODE_ENV || 'development';
 const IS_PROD = NODE_ENV === 'production';
-const SUPER_ADMIN_EMAIL = (process.env.SUPER_ADMIN_EMAIL || '').trim().toLowerCase();
+// Accepts one address or a comma-separated list, e.g.
+//   SUPER_ADMIN_EMAIL=owner@company.com,partner@gmail.com
+const SUPER_ADMIN_EMAILS = String(process.env.SUPER_ADMIN_EMAIL || '')
+  .split(',').map((e) => e.trim().toLowerCase()).filter(Boolean);
+const SUPER_ADMIN_EMAIL = SUPER_ADMIN_EMAILS[0] || '';
 
 function resolveJwtSecret() {
   const s = process.env.JWT_SECRET;
@@ -119,7 +123,8 @@ app.use(async (req, res, next) => {
 // Helpers
 // ---------------------------------------------------------------------------
 function isSuperEmail(email) {
-  return !!SUPER_ADMIN_EMAIL && String(email || '').trim().toLowerCase() === SUPER_ADMIN_EMAIL;
+  const e = String(email || '').trim().toLowerCase();
+  return !!e && SUPER_ADMIN_EMAILS.includes(e);
 }
 function signToken(user) {
   return jwt.sign({ uid: user.id, cid: user.company_id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
@@ -995,7 +1000,7 @@ app.get('/api/admin/plans', auth, requireSuper, (req, res) => {
 
 app.get('/api/admin/settings', auth, requireSuper, async (req, res) => {
   const s = await db.one('SELECT registration_open FROM platform_settings WHERE id=1');
-  res.json({ registrationOpen: !!(s && s.registration_open), superAdminEmail: SUPER_ADMIN_EMAIL, loginUrl: clientLoginUrl(req) });
+  res.json({ registrationOpen: !!(s && s.registration_open), superAdminEmail: SUPER_ADMIN_EMAIL, superAdminEmails: SUPER_ADMIN_EMAILS, loginUrl: clientLoginUrl(req) });
 });
 app.patch('/api/admin/settings', auth, requireSuper, async (req, res) => {
   const { registrationOpen } = req.body || {};
